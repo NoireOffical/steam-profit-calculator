@@ -27,13 +27,13 @@ func TestCalculateSuccess(t *testing.T) {
 	}
 
 	gotFirst := strings.Join(records[0].CSVRow(), ",")
-        wantFirst := "AK-47 Redline,100.000,120.000,3,0.440,1.320,0.995619,default"
+	wantFirst := "AK-47 Redline,100.000,120.000,3,0.440,1.320,0.995619,default"
 	if gotFirst != wantFirst {
 		t.Fatalf("first record = %q, want %q", gotFirst, wantFirst)
 	}
 
 	gotSecond := strings.Join(records[1].CSVRow(), ",")
-        wantSecond := "AK-47 Redline,100.000,135.000,3,12.995,38.985,0.884995,default"
+	wantSecond := "AK-47 Redline,100.000,135.000,3,12.995,38.985,0.884995,default"
 	if gotSecond != wantSecond {
 		t.Fatalf("second record = %q, want %q", gotSecond, wantSecond)
 	}
@@ -52,7 +52,7 @@ func TestCalculateDefaultsQuantityToOne(t *testing.T) {
 	}
 
 	got := strings.Join(records[0].CSVRow(), ",")
-        want := "Capsule,0.480,0.800,1,0.190,0.190,0.716846,default"
+	want := "Capsule,0.480,0.800,1,0.190,0.190,0.716846,default"
 	if got != want {
 		t.Fatalf("default-quantity record = %q, want %q", got, want)
 	}
@@ -72,7 +72,7 @@ func TestCalculateAllowsNegativeProfit(t *testing.T) {
 	}
 
 	got := strings.Join(records[0].CSVRow(), ",")
-        want := "AK-47 Redline,100.000,110.000,2,-7.930,-15.860,1.086130,default"
+	want := "AK-47 Redline,100.000,110.000,2,-7.930,-15.860,1.086130,default"
 	if got != want {
 		t.Fatalf("negative-profit record = %q, want %q", got, want)
 	}
@@ -93,7 +93,7 @@ func TestCalculateSupportsExplicitMultiplier(t *testing.T) {
 	}
 
 	got := strings.Join(records[0].CSVRow(), ",")
-        want := "Capsule,0.480,0.800,2,0.200,0.400,0.705882,0.850"
+	want := "Capsule,0.480,0.800,2,0.200,0.400,0.705882,0.850"
 	if got != want {
 		t.Fatalf("multiplier record = %q, want %q", got, want)
 	}
@@ -204,7 +204,7 @@ func TestCalculateReverseSuccess(t *testing.T) {
 				Multiplier:        float64Ptr(0.85),
 				TargetTotalProfit: float64Ptr(1.0),
 			},
-                        want: "Capsule,0.480,0.800,5,0.200,1.000,0.705882,0.850",
+			want: "Capsule,0.480,0.800,5,0.200,1.000,0.705882,0.850",
 		},
 		{
 			name: "solve sell price from target knife ratio",
@@ -214,7 +214,7 @@ func TestCalculateReverseSuccess(t *testing.T) {
 				BuyPrice:         float64Ptr(0.48),
 				TargetKnifeRatio: float64Ptr(0.7),
 			},
-                        want: "Capsule,0.480,0.819,1,0.206,0.206,0.700000,default",
+			want: "Capsule,0.480,0.819,1,0.206,0.206,0.700000,default",
 		},
 		{
 			name: "solve buy price from target knife ratio",
@@ -224,7 +224,7 @@ func TestCalculateReverseSuccess(t *testing.T) {
 				SellPrice:        float64Ptr(0.8),
 				TargetKnifeRatio: float64Ptr(0.7),
 			},
-                        want: "Capsule,0.469,0.800,1,0.201,0.201,0.700000,default",
+			want: "Capsule,0.469,0.800,1,0.201,0.201,0.700000,default",
 		},
 		{
 			name: "solve buy price from target net profit",
@@ -236,7 +236,7 @@ func TestCalculateReverseSuccess(t *testing.T) {
 				Multiplier:      float64Ptr(0.85),
 				TargetNetProfit: float64Ptr(0.15),
 			},
-                        want: "Capsule,0.530,0.800,2,0.150,0.300,0.779412,0.850",
+			want: "Capsule,0.530,0.800,2,0.150,0.300,0.779412,0.850",
 		},
 	}
 

@@ -5,6 +5,7 @@
 
 /steam-profit
 /steam-profit-records.csv
+/.build/
 /.tools/
 *.test
 coverage.out

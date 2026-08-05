@@ -74,7 +74,7 @@ func CalculateReverse(req domain.ReverseCalculationRequest) (domain.ProfitRecord
 	itemName := strings.TrimSpace(req.ItemName)
 	quantity := effectiveQuantity(req.Quantity)
 	multiplier := effectiveMultiplier(req.Multiplier)
-        feeLabel := effectiveFeeLabel(req.Multiplier)
+	feeLabel := effectiveFeeLabel(req.Multiplier)
 
 	switch req.SolveDirection {
 	case domain.SolveDirectionSell:
@@ -84,7 +84,7 @@ func CalculateReverse(req domain.ReverseCalculationRequest) (domain.ProfitRecord
 			return domain.ProfitRecord{}, ErrSolvedSellPriceNonPositive
 		}
 
-                return buildRecord(itemName, buyPrice, sellPrice, quantity, multiplier, feeLabel), nil
+		return buildRecord(itemName, buyPrice, sellPrice, quantity, multiplier, feeLabel), nil
 	case domain.SolveDirectionBuy:
 		sellPrice := *req.SellPrice
 		buyPrice := solveBuyPrice(req, sellPrice, quantity, multiplier)
@@ -92,7 +92,7 @@ func CalculateReverse(req domain.ReverseCalculationRequest) (domain.ProfitRecord
 			return domain.ProfitRecord{}, ErrSolvedBuyPriceNonPositive
 		}
 
-                return buildRecord(itemName, buyPrice, sellPrice, quantity, multiplier, feeLabel), nil
+		return buildRecord(itemName, buyPrice, sellPrice, quantity, multiplier, feeLabel), nil
 	default:
 		return domain.ProfitRecord{}, ErrInvalidSolveDirection
 	}

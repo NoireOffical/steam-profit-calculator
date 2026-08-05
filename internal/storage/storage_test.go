@@ -23,7 +23,7 @@ func TestCSVStoreAppendCreatesFileWithHeader(t *testing.T) {
 			NetProfit:   0.44,
 			TotalProfit: 1.32,
 			KnifeRatio:  0.995619,
-                        Fee:         "default",
+			Fee:         "default",
 		},
 	})
 	if err != nil {
@@ -37,8 +37,8 @@ func TestCSVStoreAppendCreatesFileWithHeader(t *testing.T) {
 
 	got := strings.TrimSpace(string(content))
 	want := strings.Join([]string{
-                "item_name, buy_price, sell_price, quantity, net_profit, total_profit, knife_ratio, fee",
-                "AK-47 Redline, 100.000, 120.000, 3, 0.440, 1.320, 0.995619, default",
+		"item_name, buy_price, sell_price, quantity, net_profit, total_profit, knife_ratio, fee",
+		"AK-47 Redline, 100.000, 120.000, 3, 0.440, 1.320, 0.995619, default",
 	}, "\n")
 	if got != want {
 		t.Fatalf("file content = %q, want %q", got, want)
@@ -58,7 +58,7 @@ func TestCSVStoreAppendAndList(t *testing.T) {
 			NetProfit:   0.44,
 			TotalProfit: 1.32,
 			KnifeRatio:  0.995619,
-                        Fee:         "default",
+			Fee:         "default",
 		},
 	}
 	secondBatch := []domain.ProfitRecord{
@@ -70,7 +70,7 @@ func TestCSVStoreAppendAndList(t *testing.T) {
 			NetProfit:   17.62,
 			TotalProfit: 35.24,
 			KnifeRatio:  0.920471,
-                        Fee:         "default",
+			Fee:         "default",
 		},
 	}
 
@@ -91,12 +91,12 @@ func TestCSVStoreAppendAndList(t *testing.T) {
 	}
 
 	first := strings.Join(records[0].CSVRow(), ",")
-        if first != "AK-47 Redline,100.000,120.000,3,0.440,1.320,0.995619,default" {
+	if first != "AK-47 Redline,100.000,120.000,3,0.440,1.320,0.995619,default" {
 		t.Fatalf("first record = %q", first)
 	}
 
 	second := strings.Join(records[1].CSVRow(), ",")
-        if second != "M9 Bayonet,200.000,260.000,2,17.620,35.240,0.920471,default" {
+	if second != "M9 Bayonet,200.000,260.000,2,17.620,35.240,0.920471,default" {
 		t.Fatalf("second record = %q", second)
 	}
 }
@@ -121,7 +121,7 @@ func TestCSVStoreListLegacyData(t *testing.T) {
 	}
 
 	got := strings.Join(records[0].CSVRow(), ",")
-        want := "Capsule,0.480,0.800,1,0.190,0.190,0.716846,default"
+	want := "Capsule,0.480,0.800,1,0.190,0.190,0.716846,default"
 	if got != want {
 		t.Fatalf("legacy record = %q, want %q", got, want)
 	}
@@ -147,7 +147,7 @@ func TestCSVStoreAppendMigratesLegacyData(t *testing.T) {
 			NetProfit:   0.273,
 			TotalProfit: 1.092,
 			KnifeRatio:  0.637197,
-                        Fee:         "default",
+			Fee:         "default",
 		},
 	})
 	if err != nil {
@@ -161,9 +161,9 @@ func TestCSVStoreAppendMigratesLegacyData(t *testing.T) {
 
 	got := strings.TrimSpace(string(contentBytes))
 	want := strings.Join([]string{
-                "item_name, buy_price, sell_price, quantity, net_profit, total_profit, knife_ratio, fee",
-                "Capsule, 0.480, 0.800, 1, 0.190, 0.190, 0.716846, default",
-                "Capsule, 0.480, 0.900, 4, 0.273, 1.092, 0.637197, default",
+		"item_name, buy_price, sell_price, quantity, net_profit, total_profit, knife_ratio, fee",
+		"Capsule, 0.480, 0.800, 1, 0.190, 0.190, 0.716846, default",
+		"Capsule, 0.480, 0.900, 4, 0.273, 1.092, 0.637197, default",
 	}, "\n")
 	if got != want {
 		t.Fatalf("migrated file = %q, want %q", got, want)
@@ -173,8 +173,8 @@ func TestCSVStoreAppendMigratesLegacyData(t *testing.T) {
 func TestCSVStoreListMalformedData(t *testing.T) {
 	storePath := filepath.Join(t.TempDir(), "records.csv")
 	content := strings.Join([]string{
-                "item_name,buy_price,sell_price,quantity,net_profit,total_profit,knife_ratio,fee",
-                "AK-47 Redline,not-a-number,120.000,3,0.440,1.320,0.995619,default",
+		"item_name,buy_price,sell_price,quantity,net_profit,total_profit,knife_ratio,fee",
+		"AK-47 Redline,not-a-number,120.000,3,0.440,1.320,0.995619,default",
 	}, "\n")
 	if err := os.WriteFile(storePath, []byte(content), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
@@ -191,53 +191,53 @@ func TestCSVStoreListMalformedData(t *testing.T) {
 }
 
 func TestCSVStoreListExpandedDataWithoutFeeDefaultsLabel(t *testing.T) {
-        storePath := filepath.Join(t.TempDir(), "records.csv")
-        content := strings.Join([]string{
-                "item_name,buy_price,sell_price,quantity,net_profit,total_profit,knife_ratio",
-                "Capsule,0.480,0.800,2,0.190,0.380,0.716846",
-        }, "\n")
-        if err := os.WriteFile(storePath, []byte(content), 0o644); err != nil {
-                t.Fatalf("WriteFile() error = %v", err)
-        }
+	storePath := filepath.Join(t.TempDir(), "records.csv")
+	content := strings.Join([]string{
+		"item_name,buy_price,sell_price,quantity,net_profit,total_profit,knife_ratio",
+		"Capsule,0.480,0.800,2,0.190,0.380,0.716846",
+	}, "\n")
+	if err := os.WriteFile(storePath, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
 
-        store := storage.NewCSVStore(storePath)
-        records, err := store.List()
-        if err != nil {
-                t.Fatalf("List() error = %v", err)
-        }
-        if len(records) != 1 {
-                t.Fatalf("len(records) = %d, want 1", len(records))
-        }
+	store := storage.NewCSVStore(storePath)
+	records, err := store.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("len(records) = %d, want 1", len(records))
+	}
 
-        got := strings.Join(records[0].CSVRow(), ",")
-        want := "Capsule,0.480,0.800,2,0.190,0.380,0.716846,default"
-        if got != want {
-                t.Fatalf("expanded record = %q, want %q", got, want)
-        }
+	got := strings.Join(records[0].CSVRow(), ",")
+	want := "Capsule,0.480,0.800,2,0.190,0.380,0.716846,default"
+	if got != want {
+		t.Fatalf("expanded record = %q, want %q", got, want)
+	}
 }
 
 func TestCSVStoreListExpandedDataWithoutFeeDerivesExplicitMultiplier(t *testing.T) {
-        storePath := filepath.Join(t.TempDir(), "records.csv")
-        content := strings.Join([]string{
-                "item_name,buy_price,sell_price,quantity,net_profit,total_profit,knife_ratio",
-                "Capsule,0.480,0.800,2,0.200,0.400,0.705882",
-        }, "\n")
-        if err := os.WriteFile(storePath, []byte(content), 0o644); err != nil {
-                t.Fatalf("WriteFile() error = %v", err)
-        }
+	storePath := filepath.Join(t.TempDir(), "records.csv")
+	content := strings.Join([]string{
+		"item_name,buy_price,sell_price,quantity,net_profit,total_profit,knife_ratio",
+		"Capsule,0.480,0.800,2,0.200,0.400,0.705882",
+	}, "\n")
+	if err := os.WriteFile(storePath, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
 
-        store := storage.NewCSVStore(storePath)
-        records, err := store.List()
-        if err != nil {
-                t.Fatalf("List() error = %v", err)
-        }
-        if len(records) != 1 {
-                t.Fatalf("len(records) = %d, want 1", len(records))
-        }
+	store := storage.NewCSVStore(storePath)
+	records, err := store.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("len(records) = %d, want 1", len(records))
+	}
 
-        got := strings.Join(records[0].CSVRow(), ",")
-        want := "Capsule,0.480,0.800,2,0.200,0.400,0.705882,0.850"
-        if got != want {
-                t.Fatalf("expanded record = %q, want %q", got, want)
-        }
+	got := strings.Join(records[0].CSVRow(), ",")
+	want := "Capsule,0.480,0.800,2,0.200,0.400,0.705882,0.850"
+	if got != want {
+		t.Fatalf("expanded record = %q, want %q", got, want)
+	}
 }

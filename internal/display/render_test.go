@@ -120,7 +120,7 @@ func TestWriteLookupTable(t *testing.T) {
 	want := strings.Join([]string{
 		"item_id     canonical_name                      app_name          query_time            sale_price_text  sell_price_text  sell_listings",
 		"----------  ----------------------------------  ----------------  --------------------  ---------------  ---------------  -------------",
-			"7993054046  AK-47 | Aphrodite (Battle-Scarred)  Counter-Strike 2  2026-07-14T06:15:30Z           $18.45           $19.12             17",
+		"7993054046  AK-47 | Aphrodite (Battle-Scarred)  Counter-Strike 2  2026-07-14T06:15:30Z           $18.45           $19.12             17",
 	}, "\n")
 	if got != want {
 		t.Fatalf("lookup table output = %q, want %q", got, want)

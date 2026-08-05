@@ -29,12 +29,12 @@ func TestParseCSVSuccess(t *testing.T) {
 	}
 
 	first := strings.Join(records[0].CSVRow(), ",")
-        if first != "Capsule,0.480,0.700,5,0.106,0.529,0.819252,default" {
+	if first != "Capsule,0.480,0.700,5,0.106,0.529,0.819252,default" {
 		t.Fatalf("first record = %q", first)
 	}
 
 	second := strings.Join(records[1].CSVRow(), ",")
-        if second != "Capsule,0.480,0.800,5,0.200,1.000,0.705882,0.850" {
+	if second != "Capsule,0.480,0.800,5,0.200,1.000,0.705882,0.850" {
 		t.Fatalf("second record = %q", second)
 	}
 }
@@ -58,7 +58,7 @@ func TestParseCSVDefaultsOptionalCells(t *testing.T) {
 	}
 
 	got := strings.Join(records[0].CSVRow(), ",")
-        want := "Capsule,0.480,0.800,1,0.190,0.190,0.716846,default"
+	want := "Capsule,0.480,0.800,1,0.190,0.190,0.716846,default"
 	if got != want {
 		t.Fatalf("record = %q, want %q", got, want)
 	}

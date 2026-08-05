@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-        "math"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -18,10 +18,10 @@ import (
 type schemaKind int
 
 const (
-        schemaMissing schemaKind = iota
-        schemaCurrent
-        schemaExpandedWithoutFee
-        schemaLegacy
+	schemaMissing schemaKind = iota
+	schemaCurrent
+	schemaExpandedWithoutFee
+	schemaLegacy
 )
 
 // CSVStore persists profit records in a single CSV file.
@@ -53,7 +53,7 @@ func (s *CSVStore) Append(records []domain.ProfitRecord) error {
 		return s.writeAll(records)
 	case schemaLegacy:
 		return s.writeAll(append(existing, records...))
-        case schemaCurrent:
+	case schemaCurrent:
 		file, err := os.OpenFile(s.path, os.O_WRONLY|os.O_APPEND, 0o644)
 		if err != nil {
 			return fmt.Errorf("open record file: %w", err)
@@ -66,8 +66,8 @@ func (s *CSVStore) Append(records []domain.ProfitRecord) error {
 			}
 		}
 		return nil
-        case schemaExpandedWithoutFee:
-                return s.writeAll(append(existing, records...))
+	case schemaExpandedWithoutFee:
+		return s.writeAll(append(existing, records...))
 	default:
 		return fmt.Errorf("unsupported record schema")
 	}
@@ -129,13 +129,13 @@ func (s *CSVStore) readAll() (schemaKind, []domain.ProfitRecord, error) {
 }
 
 func (s *CSVStore) writeAll(records []domain.ProfitRecord) error {
-        file, err := os.OpenFile(s.path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
-        if err != nil {
-                return fmt.Errorf("open record file: %w", err)
-        }
-        defer file.Close()
+	file, err := os.OpenFile(s.path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return fmt.Errorf("open record file: %w", err)
+	}
+	defer file.Close()
 
-        if err := writeCSVLine(file, domain.StorageRecordHeader()); err != nil {
+	if err := writeCSVLine(file, domain.StorageRecordHeader()); err != nil {
 		return fmt.Errorf("write record header: %w", err)
 	}
 	for _, record := range records {
@@ -196,10 +196,10 @@ func addSpacesAfterDelimiters(line string) string {
 
 func detectSchema(header []string) (schemaKind, error) {
 	switch {
-        case sameHeader(header, domain.StorageRecordHeader()):
-                return schemaCurrent, nil
-        case sameHeader(header, domain.RecordHeader()):
-                return schemaExpandedWithoutFee, nil
+	case sameHeader(header, domain.StorageRecordHeader()):
+		return schemaCurrent, nil
+	case sameHeader(header, domain.RecordHeader()):
+		return schemaExpandedWithoutFee, nil
 	case sameHeader(header, domain.LegacyRecordHeader()):
 		return schemaLegacy, nil
 	default:
@@ -221,10 +221,10 @@ func sameHeader(got, expected []string) bool {
 
 func parseRecord(row []string, line int, schema schemaKind) (domain.ProfitRecord, error) {
 	switch schema {
-        case schemaCurrent:
-                return parseCurrentRecord(row, line)
-        case schemaExpandedWithoutFee:
-                return parseExpandedRecordWithoutFee(row, line)
+	case schemaCurrent:
+		return parseCurrentRecord(row, line)
+	case schemaExpandedWithoutFee:
+		return parseExpandedRecordWithoutFee(row, line)
 	case schemaLegacy:
 		return parseLegacyRecord(row, line)
 	default:
@@ -233,8 +233,8 @@ func parseRecord(row []string, line int, schema schemaKind) (domain.ProfitRecord
 }
 
 func parseCurrentRecord(row []string, line int) (domain.ProfitRecord, error) {
-        if len(row) != len(domain.StorageRecordHeader()) {
-                return domain.ProfitRecord{}, fmt.Errorf("invalid record row %d: got %d columns, want %d", line, len(row), len(domain.StorageRecordHeader()))
+	if len(row) != len(domain.StorageRecordHeader()) {
+		return domain.ProfitRecord{}, fmt.Errorf("invalid record row %d: got %d columns, want %d", line, len(row), len(domain.StorageRecordHeader()))
 	}
 
 	buyPrice, err := strconv.ParseFloat(row[1], 64)
@@ -265,9 +265,9 @@ func parseCurrentRecord(row []string, line int) (domain.ProfitRecord, error) {
 	if err != nil {
 		return domain.ProfitRecord{}, fmt.Errorf("invalid knife ratio on row %d: %w", line, err)
 	}
-        if row[7] == "" {
-                return domain.ProfitRecord{}, fmt.Errorf("invalid fee on row %d: must not be empty", line)
-        }
+	if row[7] == "" {
+		return domain.ProfitRecord{}, fmt.Errorf("invalid fee on row %d: must not be empty", line)
+	}
 
 	if row[0] == "" {
 		return domain.ProfitRecord{}, fmt.Errorf("invalid item name on row %d: must not be empty", line)
@@ -281,13 +281,13 @@ func parseCurrentRecord(row []string, line int) (domain.ProfitRecord, error) {
 		NetProfit:   netProfit,
 		TotalProfit: totalProfit,
 		KnifeRatio:  knifeRatio,
-                Fee:         row[7],
+		Fee:         row[7],
 	}, nil
 }
 
 func parseExpandedRecordWithoutFee(row []string, line int) (domain.ProfitRecord, error) {
-        if len(row) != len(domain.RecordHeader()) {
-                return domain.ProfitRecord{}, fmt.Errorf("invalid record row %d: got %d columns, want %d", line, len(row), len(domain.RecordHeader()))
+	if len(row) != len(domain.RecordHeader()) {
+		return domain.ProfitRecord{}, fmt.Errorf("invalid record row %d: got %d columns, want %d", line, len(row), len(domain.RecordHeader()))
 	}
 
 	buyPrice, err := strconv.ParseFloat(row[1], 64)
@@ -298,22 +298,22 @@ func parseExpandedRecordWithoutFee(row []string, line int) (domain.ProfitRecord,
 	if err != nil {
 		return domain.ProfitRecord{}, fmt.Errorf("invalid sell price on row %d: %w", line, err)
 	}
-        quantity, err := strconv.Atoi(row[3])
+	quantity, err := strconv.Atoi(row[3])
 	if err != nil {
-                return domain.ProfitRecord{}, fmt.Errorf("invalid quantity on row %d: %w", line, err)
-        }
-        if quantity <= 0 {
-                return domain.ProfitRecord{}, fmt.Errorf("invalid quantity on row %d: must be greater than 0", line)
-        }
-        netProfit, err := strconv.ParseFloat(row[4], 64)
-        if err != nil {
-                return domain.ProfitRecord{}, fmt.Errorf("invalid net profit on row %d: %w", line, err)
-        }
-        totalProfit, err := strconv.ParseFloat(row[5], 64)
-        if err != nil {
-                return domain.ProfitRecord{}, fmt.Errorf("invalid total profit on row %d: %w", line, err)
+		return domain.ProfitRecord{}, fmt.Errorf("invalid quantity on row %d: %w", line, err)
 	}
-        knifeRatio, err := strconv.ParseFloat(row[6], 64)
+	if quantity <= 0 {
+		return domain.ProfitRecord{}, fmt.Errorf("invalid quantity on row %d: must be greater than 0", line)
+	}
+	netProfit, err := strconv.ParseFloat(row[4], 64)
+	if err != nil {
+		return domain.ProfitRecord{}, fmt.Errorf("invalid net profit on row %d: %w", line, err)
+	}
+	totalProfit, err := strconv.ParseFloat(row[5], 64)
+	if err != nil {
+		return domain.ProfitRecord{}, fmt.Errorf("invalid total profit on row %d: %w", line, err)
+	}
+	knifeRatio, err := strconv.ParseFloat(row[6], 64)
 	if err != nil {
 		return domain.ProfitRecord{}, fmt.Errorf("invalid knife ratio on row %d: %w", line, err)
 	}
@@ -321,68 +321,68 @@ func parseExpandedRecordWithoutFee(row []string, line int) (domain.ProfitRecord,
 		return domain.ProfitRecord{}, fmt.Errorf("invalid item name on row %d: must not be empty", line)
 	}
 
-        feeLabel := domain.DefaultFeeLabel()
-        if sellPrice > 0 && knifeRatio > 0 {
-                multiplier := buyPrice / (sellPrice * knifeRatio)
-                feeLabel = formatFeeLabel(multiplier)
-        } else if sellPrice > 0 {
-                multiplier := (netProfit + buyPrice) / sellPrice
-                feeLabel = formatFeeLabel(multiplier)
-        }
+	feeLabel := domain.DefaultFeeLabel()
+	if sellPrice > 0 && knifeRatio > 0 {
+		multiplier := buyPrice / (sellPrice * knifeRatio)
+		feeLabel = formatFeeLabel(multiplier)
+	} else if sellPrice > 0 {
+		multiplier := (netProfit + buyPrice) / sellPrice
+		feeLabel = formatFeeLabel(multiplier)
+	}
 
 	return domain.ProfitRecord{
 		ItemName:    row[0],
 		BuyPrice:    buyPrice,
 		SellPrice:   sellPrice,
-                Quantity:    quantity,
+		Quantity:    quantity,
 		NetProfit:   netProfit,
-                TotalProfit: totalProfit,
+		TotalProfit: totalProfit,
 		KnifeRatio:  knifeRatio,
-                Fee:         feeLabel,
+		Fee:         feeLabel,
 	}, nil
 }
 
 func parseLegacyRecord(row []string, line int) (domain.ProfitRecord, error) {
-        if len(row) != len(domain.LegacyRecordHeader()) {
-                return domain.ProfitRecord{}, fmt.Errorf("invalid record row %d: got %d columns, want %d", line, len(row), len(domain.LegacyRecordHeader()))
-        }
+	if len(row) != len(domain.LegacyRecordHeader()) {
+		return domain.ProfitRecord{}, fmt.Errorf("invalid record row %d: got %d columns, want %d", line, len(row), len(domain.LegacyRecordHeader()))
+	}
 
-        buyPrice, err := strconv.ParseFloat(row[1], 64)
-        if err != nil {
-                return domain.ProfitRecord{}, fmt.Errorf("invalid buy price on row %d: %w", line, err)
-        }
-        sellPrice, err := strconv.ParseFloat(row[2], 64)
-        if err != nil {
-                return domain.ProfitRecord{}, fmt.Errorf("invalid sell price on row %d: %w", line, err)
-        }
-        netProfit, err := strconv.ParseFloat(row[3], 64)
-        if err != nil {
-                return domain.ProfitRecord{}, fmt.Errorf("invalid net profit on row %d: %w", line, err)
-        }
-        knifeRatio, err := strconv.ParseFloat(row[4], 64)
-        if err != nil {
-                return domain.ProfitRecord{}, fmt.Errorf("invalid knife ratio on row %d: %w", line, err)
-        }
-        if row[0] == "" {
-                return domain.ProfitRecord{}, fmt.Errorf("invalid item name on row %d: must not be empty", line)
-        }
+	buyPrice, err := strconv.ParseFloat(row[1], 64)
+	if err != nil {
+		return domain.ProfitRecord{}, fmt.Errorf("invalid buy price on row %d: %w", line, err)
+	}
+	sellPrice, err := strconv.ParseFloat(row[2], 64)
+	if err != nil {
+		return domain.ProfitRecord{}, fmt.Errorf("invalid sell price on row %d: %w", line, err)
+	}
+	netProfit, err := strconv.ParseFloat(row[3], 64)
+	if err != nil {
+		return domain.ProfitRecord{}, fmt.Errorf("invalid net profit on row %d: %w", line, err)
+	}
+	knifeRatio, err := strconv.ParseFloat(row[4], 64)
+	if err != nil {
+		return domain.ProfitRecord{}, fmt.Errorf("invalid knife ratio on row %d: %w", line, err)
+	}
+	if row[0] == "" {
+		return domain.ProfitRecord{}, fmt.Errorf("invalid item name on row %d: must not be empty", line)
+	}
 
-        return domain.ProfitRecord{
-                ItemName:    row[0],
-                BuyPrice:    buyPrice,
-                SellPrice:   sellPrice,
-                Quantity:    domain.DefaultQuantity(),
-                NetProfit:   netProfit,
-                TotalProfit: netProfit,
-                KnifeRatio:  knifeRatio,
-                Fee:         domain.DefaultFeeLabel(),
-        }, nil
+	return domain.ProfitRecord{
+		ItemName:    row[0],
+		BuyPrice:    buyPrice,
+		SellPrice:   sellPrice,
+		Quantity:    domain.DefaultQuantity(),
+		NetProfit:   netProfit,
+		TotalProfit: netProfit,
+		KnifeRatio:  knifeRatio,
+		Fee:         domain.DefaultFeeLabel(),
+	}, nil
 }
 
 func formatFeeLabel(multiplier float64) string {
-        if math.Abs(multiplier-domain.DefaultMultiplier()) <= 0.0005 {
-                return domain.DefaultFeeLabel()
-        }
+	if math.Abs(multiplier-domain.DefaultMultiplier()) <= 0.0005 {
+		return domain.DefaultFeeLabel()
+	}
 
-        return domain.FormatMultiplier(multiplier)
+	return domain.FormatMultiplier(multiplier)
 }

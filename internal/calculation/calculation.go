@@ -52,10 +52,10 @@ func Calculate(req domain.CalculationRequest) ([]domain.ProfitRecord, error) {
 	itemName := strings.TrimSpace(req.ItemName)
 	quantity := effectiveQuantity(req.Quantity)
 	multiplier := effectiveMultiplier(req.Multiplier)
-        feeLabel := effectiveFeeLabel(req.Multiplier)
+	feeLabel := effectiveFeeLabel(req.Multiplier)
 	records := make([]domain.ProfitRecord, 0, len(req.SellPrices))
 	for _, sellPrice := range req.SellPrices {
-                records = append(records, buildRecord(itemName, req.BuyPrice, sellPrice, quantity, multiplier, feeLabel))
+		records = append(records, buildRecord(itemName, req.BuyPrice, sellPrice, quantity, multiplier, feeLabel))
 	}
 
 	return records, nil
@@ -102,11 +102,11 @@ func effectiveMultiplier(multiplier *float64) float64 {
 }
 
 func effectiveFeeLabel(multiplier *float64) string {
-        if multiplier == nil {
-                return domain.DefaultFeeLabel()
-        }
+	if multiplier == nil {
+		return domain.DefaultFeeLabel()
+	}
 
-        return domain.FormatMultiplier(*multiplier)
+	return domain.FormatMultiplier(*multiplier)
 }
 
 func buildRecord(itemName string, buyPrice, sellPrice float64, quantity int, multiplier float64, feeLabel string) domain.ProfitRecord {
@@ -121,6 +121,6 @@ func buildRecord(itemName string, buyPrice, sellPrice float64, quantity int, mul
 		NetProfit:   netProfit,
 		TotalProfit: netProfit * float64(quantity),
 		KnifeRatio:  buyPrice / netSell,
-                Fee:         feeLabel,
+		Fee:         feeLabel,
 	}
 }
