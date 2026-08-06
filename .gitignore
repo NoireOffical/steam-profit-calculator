@@ -5,6 +5,9 @@
 
 /steam-profit
 /steam-profit-records.csv
+/steam-profit.db
+/steam-profit.db-shm
+/steam-profit.db-wal
 /.build/
 /.tools/
 *.test

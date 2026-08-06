@@ -12,26 +12,26 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"steam-profit-calculator/internal/assistant"
 	"steam-profit-calculator/internal/calculation"
 	"steam-profit-calculator/internal/domain"
 	"steam-profit-calculator/internal/lookup"
+	"steam-profit-calculator/internal/storage"
 )
 
 const (
 	maxJSONBodyBytes = 1 << 20
 	maxLookupLimit   = 50
+	maxItemPrefix    = 100
 )
 
 //go:embed web/*
 var embeddedWeb embed.FS
 
 // RecordStore is the persistence boundary required by the web application.
-type RecordStore interface {
-	Append(records []domain.ProfitRecord) error
-	List() ([]domain.ProfitRecord, error)
-}
+type RecordStore = storage.RecordRepository
 
 type server struct {
 	lookupService *lookup.Service
@@ -82,7 +82,15 @@ type reverseCalculationRequest struct {
 }
 
 type recordsResponse struct {
-	Records []profitRecordResponse `json:"records"`
+	Records    []profitRecordResponse `json:"records"`
+	Pagination *paginationResponse    `json:"pagination,omitempty"`
+}
+
+type paginationResponse struct {
+	Total   int  `json:"total"`
+	Limit   int  `json:"limit"`
+	Offset  int  `json:"offset"`
+	HasMore bool `json:"has_more"`
 }
 
 type itemsResponse struct {
@@ -90,6 +98,8 @@ type itemsResponse struct {
 }
 
 type profitRecordResponse struct {
+	ID          int64   `json:"id"`
+	CreatedAt   string  `json:"created_at"`
 	ItemName    string  `json:"item_name"`
 	BuyPrice    float64 `json:"buy_price"`
 	SellPrice   float64 `json:"sell_price"`
@@ -280,12 +290,13 @@ func (s *server) handleCalculations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.recordStore.Append(records); err != nil {
+	stored, err := s.recordStore.Append(r.Context(), records)
+	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, "storage_error", "unable to save calculation records")
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, dataEnvelope{Data: recordsResponse{Records: mapProfitRecords(records)}})
+	writeJSON(w, http.StatusCreated, dataEnvelope{Data: recordsResponse{Records: mapStoredProfitRecords(stored)}})
 }
 
 func (s *server) handleReverseCalculations(w http.ResponseWriter, r *http.Request) {
@@ -315,12 +326,13 @@ func (s *server) handleReverseCalculations(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if err := s.recordStore.Append([]domain.ProfitRecord{record}); err != nil {
+	stored, err := s.recordStore.Append(r.Context(), []domain.ProfitRecord{record})
+	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, "storage_error", "unable to save calculation record")
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, dataEnvelope{Data: recordsResponse{Records: mapProfitRecords([]domain.ProfitRecord{record})}})
+	writeJSON(w, http.StatusCreated, dataEnvelope{Data: recordsResponse{Records: mapStoredProfitRecords(stored)}})
 }
 
 func (s *server) handleRecords(w http.ResponseWriter, r *http.Request) {
@@ -328,13 +340,64 @@ func (s *server) handleRecords(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	records, err := s.recordStore.List()
+	query, err := parseRecordQuery(r)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	page, err := s.recordStore.Query(r.Context(), query)
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, "storage_error", "unable to load calculation records")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, dataEnvelope{Data: recordsResponse{Records: mapProfitRecords(records)}})
+	writeJSON(w, http.StatusOK, dataEnvelope{Data: recordsResponse{
+		Records: mapStoredProfitRecords(page.Records),
+		Pagination: &paginationResponse{
+			Total:   page.Total,
+			Limit:   page.Limit,
+			Offset:  page.Offset,
+			HasMore: page.Offset+len(page.Records) < page.Total,
+		},
+	}})
+}
+
+func parseRecordQuery(r *http.Request) (storage.RecordQuery, error) {
+	values := r.URL.Query()
+	allowed := map[string]bool{"item": true, "outcome": true, "order": true, "limit": true, "offset": true}
+	for key, entries := range values {
+		if !allowed[key] {
+			return storage.RecordQuery{}, fmt.Errorf("unsupported query parameter %q", key)
+		}
+		if len(entries) != 1 {
+			return storage.RecordQuery{}, fmt.Errorf("query parameter %q must be supplied once", key)
+		}
+	}
+
+	itemPrefix := strings.TrimSpace(values.Get("item"))
+	if utf8.RuneCountInString(itemPrefix) > maxItemPrefix {
+		return storage.RecordQuery{}, fmt.Errorf("item must not exceed %d characters", maxItemPrefix)
+	}
+	query := storage.RecordQuery{
+		ItemPrefix: itemPrefix,
+		Outcome:    storage.RecordOutcome(strings.TrimSpace(values.Get("outcome"))),
+		Order:      storage.RecordOrder(strings.TrimSpace(values.Get("order"))),
+	}
+	if rawLimit := strings.TrimSpace(values.Get("limit")); rawLimit != "" {
+		limit, err := strconv.Atoi(rawLimit)
+		if err != nil {
+			return storage.RecordQuery{}, fmt.Errorf("limit must be an integer between 1 and %d", storage.MaxRecordLimit)
+		}
+		query.Limit = limit
+	}
+	if rawOffset := strings.TrimSpace(values.Get("offset")); rawOffset != "" {
+		offset, err := strconv.Atoi(rawOffset)
+		if err != nil {
+			return storage.RecordQuery{}, fmt.Errorf("offset must be a non-negative integer")
+		}
+		query.Offset = offset
+	}
+	return storage.NormalizeRecordQuery(query)
 }
 
 func (s *server) handleUnknownAPI(w http.ResponseWriter, _ *http.Request) {
@@ -405,10 +468,13 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-func mapProfitRecords(records []domain.ProfitRecord) []profitRecordResponse {
+func mapStoredProfitRecords(records []storage.StoredProfitRecord) []profitRecordResponse {
 	mapped := make([]profitRecordResponse, 0, len(records))
-	for _, record := range records {
+	for _, stored := range records {
+		record := stored.Record
 		mapped = append(mapped, profitRecordResponse{
+			ID:          stored.ID,
+			CreatedAt:   stored.CreatedAt.UTC().Format(time.RFC3339Nano),
 			ItemName:    record.ItemName,
 			BuyPrice:    canonicalNumber(domain.FormatPrice(record.BuyPrice)),
 			SellPrice:   canonicalNumber(domain.FormatPrice(record.SellPrice)),

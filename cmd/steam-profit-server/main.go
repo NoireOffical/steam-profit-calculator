@@ -20,14 +20,49 @@ import (
 )
 
 const (
-	defaultAddress    = "127.0.0.1:8080"
-	defaultRecordFile = "steam-profit-records.csv"
+	defaultAddress      = "127.0.0.1:8080"
+	defaultDatabaseFile = "steam-profit.db"
+	defaultRecordFile   = "steam-profit-records.csv"
 )
 
 func main() {
 	address := flag.String("addr", environmentOrDefault("STEAM_PROFIT_SERVER_ADDR", defaultAddress), "HTTP listen address")
-	recordFile := flag.String("file", environmentOrDefault("STEAM_PROFIT_RECORD_FILE", defaultRecordFile), "record file path")
+	storageMode := flag.String("storage", environmentOrDefault("STEAM_PROFIT_STORAGE", "sqlite"), "record storage: sqlite or csv")
+	databaseFile := flag.String("db", environmentOrDefault("STEAM_PROFIT_DATABASE_FILE", defaultDatabaseFile), "SQLite database path")
+	recordFile := flag.String("file", environmentOrDefault("STEAM_PROFIT_RECORD_FILE", defaultRecordFile), "legacy CSV record path used by CSV storage")
+	importCSV := flag.String("import-csv", environmentOrDefault("STEAM_PROFIT_IMPORT_CSV", ""), "compatible CSV file to import into SQLite before startup")
 	flag.Parse()
+
+	var recordStore storage.RecordRepository
+	switch strings.ToLower(strings.TrimSpace(*storageMode)) {
+	case "sqlite":
+		repository, err := storage.OpenSQLiteRepository(*databaseFile)
+		if err != nil {
+			log.Fatalf("open SQLite record repository: %v", err)
+		}
+		defer func() {
+			if err := repository.Close(); err != nil {
+				log.Printf("close SQLite record repository: %v", err)
+			}
+		}()
+		if path := strings.TrimSpace(*importCSV); path != "" {
+			result, err := repository.ImportCSV(context.Background(), path)
+			if err != nil {
+				log.Fatalf("import CSV records: %v", err)
+			}
+			log.Printf("CSV import complete: %d inserted, %d skipped", result.Inserted, result.Skipped)
+		}
+		recordStore = repository
+		log.Printf("record storage: SQLite (%s)", *databaseFile)
+	case "csv":
+		if strings.TrimSpace(*importCSV) != "" {
+			log.Fatal("--import-csv requires --storage=sqlite")
+		}
+		recordStore = storage.NewCSVRepository(*recordFile)
+		log.Printf("record storage: legacy CSV (%s)", *recordFile)
+	default:
+		log.Fatalf("invalid record storage %q: expected sqlite or csv", *storageMode)
+	}
 
 	lookupClient, err := lookup.NewClientFromEnvironment()
 	if err != nil {
@@ -42,7 +77,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("create assistant: %v", err)
 	}
-	handler, err := webapi.NewHandlerWithAssistant(lookupClient, storage.NewCSVStore(*recordFile), assistantService)
+	handler, err := webapi.NewHandlerWithAssistant(lookupClient, recordStore, assistantService)
 	if err != nil {
 		log.Fatalf("create web application: %v", err)
 	}

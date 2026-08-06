@@ -2,6 +2,22 @@
 
 All notable demonstrable milestones are recorded here. Until the public-operation requirements are complete, each version is published as a GitHub Pre-release with an immutable annotated tag.
 
+## [v0.3.0] - Unreleased
+
+### Added
+
+- Versioned CGo-free SQLite repository for web calculation history.
+- Durable record IDs, UTC timestamps, source metadata, and reserved ownership/session fields.
+- Atomic web batches and explicit idempotent CSV-to-SQLite import.
+- Item/outcome filters, stable order, bounded pagination, and matching browser controls.
+- Explicit legacy CSV web mode for compatibility and operational rollback.
+
+### Compatibility
+
+- Existing CLI commands and all supported CSV schemas remain unchanged.
+- SQLite is now the default web storage; `--storage=csv --file ...` restores the previous mode.
+- Source CSV files are never modified by SQLite import.
+
 ## [v0.2.0] - 2026-08-06
 
 ### Added

@@ -6,7 +6,7 @@
 
 Steam Profit Calculator is a Go application for evaluating Steam Community Market trade scenarios. It provides an optional tool-grounded AI strategy assistant, a browser workbench, and a CLI for looking up market items, calculating profit across one or more sell prices, solving prices from targets, importing CSV scenarios, and persisting normalized results on the server.
 
-The project keeps its formulas, storage schema, provider behavior, and error handling explicit. It is intended as a small, testable example of domain modeling, CLI design, external API integration, and backward-compatible CSV persistence.
+The project keeps its formulas, storage schema, provider behavior, and error handling explicit. It is intended as a small, testable example of domain modeling, CLI design, external API integration, versioned SQLite persistence, and backward-compatible CSV migration.
 
 > This project is not affiliated with Valve or Steam. Market data and calculated results are informational estimates, not financial advice.
 
@@ -17,6 +17,9 @@ The project keeps its formulas, storage schema, provider behavior, and error han
 - SSE progress, structured evidence, answer chunks, and model-usage metadata
 - A numeric grounding guard that suppresses uncited or unsupported model numbers
 - A 30-case deterministic evaluation baseline that requires no live model credential
+- Versioned SQLite web persistence with durable record IDs and UTC timestamps
+- Server-side item/outcome filters, stable ordering, and bounded history pagination
+- Explicit, idempotent CSV-to-SQLite import plus a legacy CSV rollback mode
 - Five compatible CLI commands: `lookup`, `add`, `reverse`, `import`, and `list`
 - Forward calculations for multiple sell prices in one invocation
 - Reverse calculations from target per-item profit, total profit, or knife ratio
@@ -50,11 +53,14 @@ flowchart LR
     G --> F
     F --> H["Profit records"]
 
-    H --> I["CSV storage"]
-    I --> J["Legacy schema migration"]
+    H --> R["Web record repository"]
+    R --> I["Versioned SQLite"]
+    R --> J["Legacy CSV adapter"]
+    L --> J
+    J --> Q["Compatible CSV schemas"]
     E --> K["Browser / table / CSV renderer"]
     H --> K
-    J --> K
+    I --> K
 ```
 
 ## Requirements
@@ -63,7 +69,7 @@ flowchart LR
 - Node.js for the browser-script syntax check in `make check`
 - Network access only when using `lookup`
 
-The calculator, reverse solver, importer, storage, and list workflows run entirely locally and use only the Go standard library.
+The calculator, reverse solver, importer, storage, and list workflows run entirely locally. The web server uses the pinned CGo-free `modernc.org/sqlite` driver; deterministic CLI workflows keep their existing CSV behavior.
 
 ## Quick start
 
@@ -105,7 +111,7 @@ The server can also run from the embedded single binary:
 
 ```bash
 make build
-./.build/steam-profit-server --addr 127.0.0.1:8080 --file ./steam-profit-records.csv
+./.build/steam-profit-server --addr 127.0.0.1:8080 --db ./steam-profit.db
 ```
 
 Initial API routes:
@@ -116,11 +122,32 @@ Initial API routes:
 | `GET /api/v1/items` | Search normalized market items |
 | `POST /api/v1/calculations` | Calculate and persist forward scenarios |
 | `POST /api/v1/reverse-calculations` | Solve and persist a target price |
-| `GET /api/v1/records` | Read server-side history |
+| `GET /api/v1/records` | Read filtered, paginated server-side history |
 | `GET /api/v1/assistant/status` | Read safe assistant availability metadata |
 | `POST /api/v1/assistant/stream` | Stream tool progress, evidence, and answer events over SSE |
 
-This remains a local, single-user application with CSV persistence. Assistant requests are stateless and are not persisted. A database, authentication, rate limiting, live-model evaluation, and production observability are required before public deployment.
+`GET /api/v1/records` accepts `item`, `outcome=all|profit|loss`, `order=newest|oldest`, `limit=1..100`, and a non-negative `offset`. Stored records include a durable `id` and `created_at`; responses include `total`, `limit`, `offset`, and `has_more` pagination metadata.
+
+SQLite is the default web persistence mode. Import a historical compatible CSV explicitly and safely repeat the command when the file grows:
+
+```bash
+./.build/steam-profit-server --db ./steam-profit.db --import-csv ./steam-profit-records.csv
+```
+
+The source CSV is never modified. Existing source rows are skipped on repeat imports. To roll the web server back to the previous storage behavior:
+
+```bash
+./.build/steam-profit-server --storage csv --file ./steam-profit-records.csv
+```
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `STEAM_PROFIT_STORAGE` | `sqlite` | Web repository: `sqlite` or `csv` |
+| `STEAM_PROFIT_DATABASE_FILE` | `steam-profit.db` | SQLite database path |
+| `STEAM_PROFIT_RECORD_FILE` | `steam-profit-records.csv` | CSV path used in legacy mode |
+| `STEAM_PROFIT_IMPORT_CSV` | empty | Compatible CSV imported before SQLite startup |
+
+This remains a local, single-user application. Assistant requests are stateless and are not persisted. Authentication, rate limiting, live-model evaluation, backups, and production observability are required before public deployment.
 
 ## AI strategy assistant
 
@@ -284,6 +311,8 @@ item_name,buy_price,sell_price,quantity,net_profit,total_profit,knife_ratio,fee
 
 Older five- and seven-column files remain readable and are migrated when new records are appended.
 
+The web SQLite schema stores the same canonical values as scaled integers, plus record identity, UTC creation time, source metadata, and nullable future ownership/session fields. Ordered migrations are recorded in `schema_migrations`; released migrations are immutable.
+
 ## Project structure
 
 ```text
@@ -296,7 +325,7 @@ internal/domain/         Requests, records, and field schemas
 internal/importer/       Atomic batch parsing
 internal/lookup/         Provider configuration and HTTP client
 internal/assistant/      Model provider, read-only tools, grounding, and evaluations
-internal/storage/        CSV persistence and schema compatibility
+internal/storage/        SQLite repository, CSV compatibility, and migration
 internal/webapi/         JSON API and embedded browser application
 openspec/                Requirements and archived change history
 ```

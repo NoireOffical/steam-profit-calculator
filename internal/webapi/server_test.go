@@ -8,10 +8,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"steam-profit-calculator/internal/assistant"
 	"steam-profit-calculator/internal/domain"
 	"steam-profit-calculator/internal/lookup"
+	"steam-profit-calculator/internal/storage"
 	"steam-profit-calculator/internal/webapi"
 )
 
@@ -30,6 +32,8 @@ type memoryRecordStore struct {
 	records   []domain.ProfitRecord
 	appendErr error
 	listErr   error
+	query     storage.RecordQuery
+	queries   int
 }
 
 type stubAssistantModel struct {
@@ -58,19 +62,65 @@ func (s *stubAssistantModel) Respond(_ context.Context, _ assistant.ModelRequest
 	return assistant.ModelResponse{Text: "计算结果已由工具验证 [T1]。仅供研究，不构成投资或交易建议。", RequestID: "fake-request"}, nil
 }
 
-func (s *memoryRecordStore) Append(records []domain.ProfitRecord) error {
-	if s.appendErr != nil {
-		return s.appendErr
+func (s *memoryRecordStore) Append(ctx context.Context, records []domain.ProfitRecord) ([]storage.StoredProfitRecord, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
+	if s.appendErr != nil {
+		return nil, s.appendErr
+	}
+	startID := len(s.records) + 1
 	s.records = append(s.records, records...)
-	return nil
+	createdAt := time.Date(2026, time.August, 6, 12, 0, 0, 0, time.UTC)
+	stored := make([]storage.StoredProfitRecord, 0, len(records))
+	for i, record := range records {
+		stored = append(stored, storage.StoredProfitRecord{ID: int64(startID + i), CreatedAt: createdAt, Record: record})
+	}
+	return stored, nil
 }
 
-func (s *memoryRecordStore) List() ([]domain.ProfitRecord, error) {
-	if s.listErr != nil {
-		return nil, s.listErr
+func (s *memoryRecordStore) Query(ctx context.Context, query storage.RecordQuery) (storage.RecordPage, error) {
+	if err := ctx.Err(); err != nil {
+		return storage.RecordPage{}, err
 	}
-	return append([]domain.ProfitRecord(nil), s.records...), nil
+	if s.listErr != nil {
+		return storage.RecordPage{}, s.listErr
+	}
+	normalized, err := storage.NormalizeRecordQuery(query)
+	if err != nil {
+		return storage.RecordPage{}, err
+	}
+	s.query = normalized
+	s.queries++
+	createdAt := time.Date(2026, time.August, 6, 12, 0, 0, 0, time.UTC)
+	matched := make([]storage.StoredProfitRecord, 0, len(s.records))
+	for i, record := range s.records {
+		if normalized.ItemPrefix != "" && !strings.HasPrefix(strings.ToLower(record.ItemName), strings.ToLower(normalized.ItemPrefix)) {
+			continue
+		}
+		if normalized.Outcome == storage.RecordOutcomeProfit && record.TotalProfit < 0 {
+			continue
+		}
+		if normalized.Outcome == storage.RecordOutcomeLoss && record.TotalProfit >= 0 {
+			continue
+		}
+		matched = append(matched, storage.StoredProfitRecord{ID: int64(i + 1), CreatedAt: createdAt, Record: record})
+	}
+	if normalized.Order == storage.RecordOrderNewest {
+		for left, right := 0, len(matched)-1; left < right; left, right = left+1, right-1 {
+			matched[left], matched[right] = matched[right], matched[left]
+		}
+	}
+	page := storage.RecordPage{Total: len(matched), Limit: normalized.Limit, Offset: normalized.Offset, Records: []storage.StoredProfitRecord{}}
+	if normalized.Offset >= len(matched) {
+		return page, nil
+	}
+	end := normalized.Offset + normalized.Limit
+	if end > len(matched) {
+		end = len(matched)
+	}
+	page.Records = append(page.Records, matched[normalized.Offset:end]...)
+	return page, nil
 }
 
 func TestHealthEndpointAndSecurityHeaders(t *testing.T) {
@@ -189,6 +239,9 @@ func TestCalculationEndpointPersistsAndReturnsRecords(t *testing.T) {
 	if got := second["total_profit"].(float64); got != 0.4 {
 		t.Fatalf("response total_profit = %v, want canonical 0.4", got)
 	}
+	if second["id"].(float64) != 2 || second["created_at"].(string) != "2026-08-06T12:00:00Z" {
+		t.Fatalf("response metadata = id %v created_at %v", second["id"], second["created_at"])
+	}
 }
 
 func TestCalculationEndpointRejectsUnknownFieldWithoutPersistence(t *testing.T) {
@@ -275,6 +328,52 @@ func TestRecordsEndpointReturnsPersistedHistory(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Body.String(), `"item_name":"Capsule"`) {
 		t.Fatalf("body = %q, want persisted record", recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), `"pagination":{"total":1,"limit":20,"offset":0,"has_more":false}`) {
+		t.Fatalf("body = %q, want pagination metadata", recorder.Body.String())
+	}
+}
+
+func TestRecordsEndpointValidatesAndForwardsHistoryQuery(t *testing.T) {
+	store := &memoryRecordStore{records: []domain.ProfitRecord{
+		{ItemName: "AK-47 Redline", Quantity: 1, TotalProfit: -1, Fee: "default"},
+		{ItemName: "M9 Bayonet", Quantity: 1, TotalProfit: 2, Fee: "default"},
+	}}
+	handler := newTestHandler(t, &stubLookupClient{}, store)
+	recorder := performRequest(handler, http.MethodGet, "/api/v1/records?item=ak-47&outcome=loss&order=oldest&limit=10&offset=0", "", "")
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if store.queries != 1 || store.query.ItemPrefix != "ak-47" || store.query.Outcome != storage.RecordOutcomeLoss || store.query.Order != storage.RecordOrderOldest || store.query.Limit != 10 {
+		t.Fatalf("forwarded query = %#v, calls = %d", store.query, store.queries)
+	}
+	if !strings.Contains(recorder.Body.String(), `"item_name":"AK-47 Redline"`) || !strings.Contains(recorder.Body.String(), `"total":1`) {
+		t.Fatalf("body = %s", recorder.Body.String())
+	}
+}
+
+func TestRecordsEndpointRejectsInvalidHistoryQueryWithoutRepositoryCall(t *testing.T) {
+	tests := []string{
+		"/api/v1/records?limit=101",
+		"/api/v1/records?offset=-1",
+		"/api/v1/records?outcome=unknown",
+		"/api/v1/records?order=random",
+		"/api/v1/records?invented=true",
+		"/api/v1/records?limit=10&limit=20",
+	}
+	for _, target := range tests {
+		t.Run(target, func(t *testing.T) {
+			store := &memoryRecordStore{}
+			handler := newTestHandler(t, &stubLookupClient{}, store)
+			recorder := performRequest(handler, http.MethodGet, target, "", "")
+			if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), `"code":"invalid_request"`) {
+				t.Fatalf("status/body = %d %s", recorder.Code, recorder.Body.String())
+			}
+			if store.queries != 0 {
+				t.Fatalf("repository calls = %d, want 0", store.queries)
+			}
+		})
 	}
 }
 

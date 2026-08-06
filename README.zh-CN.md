@@ -6,7 +6,7 @@
 
 Steam Profit Calculator 是一个使用 Go 编写的 Steam Community Market 收益分析应用。它同时提供带可信工具调用的 AI 策略助手、浏览器工作台和命令行工具，支持查询市场商品、按一个或多个卖价正向计算收益、根据目标收益或挂刀比例反推买卖价格、批量导入 CSV 场景，以及在服务端持久化和展示计算记录。
 
-项目刻意保持计算公式、存储格式、外部 provider 行为和错误处理清晰可见，可作为领域建模、CLI 设计、外部 API 集成和兼容性数据迁移的小型工程示例。
+项目刻意保持计算公式、存储格式、外部 provider 行为和错误处理清晰可见，可作为领域建模、CLI 设计、外部 API 集成、版本化 SQLite 持久化和兼容性数据迁移的小型工程示例。
 
 > 本项目与 Valve 或 Steam 无关联。市场数据和计算结果仅供参考，不构成投资或交易建议。
 
@@ -17,6 +17,9 @@ Steam Profit Calculator 是一个使用 Go 编写的 Steam Community Market 收�
 - 通过 SSE 渐进展示工具进度、结构化依据、回答和模型用量；
 - 对模型回答执行数值溯源校验，无引用或工具结果中不存在的数字会被安全替换；
 - 提供 30 条无需真实模型密钥的固定评测基线；
+- Web 默认使用版本化 SQLite，记录具有稳定 ID 和 UTC 创建时间；
+- 历史记录支持服务端商品/收益筛选、稳定排序和有界分页；
+- 支持显式、幂等的 CSV 到 SQLite 导入，并保留 CSV 回滚模式；
 - 保留 `lookup`、`add`、`reverse`、`import`、`list` 五个独立 CLI 命令；
 - 一次传入多个卖价，批量计算不同退出价格下的收益；
 - 根据目标单件收益、目标总收益或挂刀比例反推买价/卖价；
@@ -50,11 +53,14 @@ flowchart LR
     G --> F
     F --> H["收益记录"]
 
-    H --> I["CSV 本地存储"]
-    I --> J["旧格式兼容与迁移"]
+    H --> R["Web 记录仓储接口"]
+    R --> I["版本化 SQLite"]
+    R --> J["旧版 CSV 适配器"]
+    L --> J
+    J --> Q["兼容历史 CSV 格式"]
     E --> K["浏览器 / 表格 / CSV 渲染"]
     H --> K
-    J --> K
+    I --> K
 ```
 
 ## 环境要求
@@ -63,7 +69,7 @@ flowchart LR
 - Node.js（仅用于 `make check` 的浏览器脚本语法检查）；
 - 仅 `lookup` 命令需要网络访问。
 
-正向计算、反向求解、导入、存储和记录读取完全在本地运行，项目当前只依赖 Go 标准库。
+正向计算、反向求解、导入、存储和记录读取完全在本地运行。Web 服务固定使用无需 CGo 的 `modernc.org/sqlite` 驱动；CLI 继续沿用原有 CSV 行为。
 
 ## 快速开始
 
@@ -105,7 +111,7 @@ make run-web
 
 ```bash
 make build
-./.build/steam-profit-server --addr 127.0.0.1:8080 --file ./steam-profit-records.csv
+./.build/steam-profit-server --addr 127.0.0.1:8080 --db ./steam-profit.db
 ```
 
 首个版本提供以下 API：
@@ -116,11 +122,32 @@ make build
 | `GET /api/v1/items` | 查询标准化市场商品 |
 | `POST /api/v1/calculations` | 计算并保存正向收益场景 |
 | `POST /api/v1/reverse-calculations` | 反推并保存目标价格 |
-| `GET /api/v1/records` | 读取服务端历史记录 |
+| `GET /api/v1/records` | 读取筛选、分页后的服务端历史记录 |
 | `GET /api/v1/assistant/status` | 读取不含密钥的助手可用状态 |
 | `POST /api/v1/assistant/stream` | 以 SSE 返回工具进度、依据和回答 |
 
-当前 Web 版本面向本地单用户实践，仍使用 CSV 存储。AI 对话是无状态且不落盘的；公开部署前仍需完成数据库、身份认证、限流、真实模型评测和运行监控。
+`GET /api/v1/records` 支持 `item`、`outcome=all|profit|loss`、`order=newest|oldest`、`limit=1..100` 和非负 `offset`。每条记录包含稳定 `id` 与 `created_at`，响应同时给出 `total`、`limit`、`offset` 和 `has_more`。
+
+Web 默认使用 SQLite。可以显式导入历史兼容 CSV，同一文件重复执行不会重复导入已有行：
+
+```bash
+./.build/steam-profit-server --db ./steam-profit.db --import-csv ./steam-profit-records.csv
+```
+
+导入不会修改源 CSV。若需要回退到旧版 Web 存储方式：
+
+```bash
+./.build/steam-profit-server --storage csv --file ./steam-profit-records.csv
+```
+
+| 环境变量 | 默认值 | 用途 |
+| --- | --- | --- |
+| `STEAM_PROFIT_STORAGE` | `sqlite` | Web 仓储：`sqlite` 或 `csv` |
+| `STEAM_PROFIT_DATABASE_FILE` | `steam-profit.db` | SQLite 数据库路径 |
+| `STEAM_PROFIT_RECORD_FILE` | `steam-profit-records.csv` | CSV 模式使用的记录路径 |
+| `STEAM_PROFIT_IMPORT_CSV` | 空 | SQLite 启动前显式导入的兼容 CSV |
+
+当前 Web 版本仍面向本地单用户实践。AI 对话无状态且不落盘；公开部署前仍需完成身份认证、限流、真实模型评测、备份和运行监控。
 
 ## AI 策略助手
 
@@ -288,6 +315,8 @@ item_name,buy_price,sell_price,quantity,net_profit,total_profit,knife_ratio,fee
 
 旧版五列和七列文件仍可读取，并会在后续追加记录时迁移到当前格式。
 
+Web SQLite 使用缩放整数保存同一组规范化数值，并增加记录 ID、UTC 创建时间、来源信息以及可空的未来归属/会话字段。`schema_migrations` 记录有序迁移；已经发布的迁移不会修改。
+
 ## 项目结构
 
 ```text
@@ -300,7 +329,7 @@ internal/domain/         请求、记录与字段模型
 internal/importer/       原子化批量导入
 internal/lookup/         Provider 配置与 HTTP 客户端
 internal/assistant/      模型 Provider、只读工具、数值溯源和评测
-internal/storage/        CSV 存储和格式兼容
+internal/storage/        SQLite 仓储、CSV 兼容与迁移
 internal/webapi/         JSON API 与嵌入式浏览器应用
 openspec/                需求规范与历史变更
 ```

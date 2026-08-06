@@ -168,12 +168,47 @@
             <div class="panel-heading horizontal-heading">
               <div>
                 <span class="step-number">04</span>
-                <h2>历史记录</h2>
+                <h2>可追溯历史</h2>
               </div>
               <button id="refresh-history" class="quiet-button" type="button">刷新</button>
             </div>
+            <form id="history-form" class="history-toolbar" aria-label="筛选历史记录">
+              <label class="field history-search-field">
+                <span>商品名称前缀</span>
+                <input id="history-item" name="item" type="search" maxlength="100" placeholder="例如：AK-47" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>收益结果</span>
+                <select id="history-outcome" name="outcome">
+                  <option value="all">全部</option>
+                  <option value="profit">盈利或持平</option>
+                  <option value="loss">亏损</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>记录顺序</span>
+                <select id="history-order" name="order">
+                  <option value="newest">最新优先</option>
+                  <option value="oldest">最早优先</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>每页数量</span>
+                <select id="history-limit" name="limit">
+                  <option value="10">10 条</option>
+                  <option value="20" selected>20 条</option>
+                  <option value="50">50 条</option>
+                </select>
+              </label>
+              <button class="primary-button history-filter-button" type="submit">应用筛选</button>
+            </form>
             <p id="history-message" class="message" aria-live="polite"></p>
             <div id="history-results" class="table-shell" tabindex="0" aria-label="历史计算记录"></div>
+            <div class="history-pagination" aria-label="历史记录分页">
+              <button id="history-previous" class="quiet-button" type="button" disabled>上一页</button>
+              <span id="history-page-summary" aria-live="polite">等待载入记录</span>
+              <button id="history-next" class="quiet-button" type="button" disabled>下一页</button>
+            </div>
           </article>
         </section>
 

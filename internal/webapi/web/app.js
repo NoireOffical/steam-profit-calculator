@@ -15,6 +15,14 @@ const elements = {
   calculationResults: document.querySelector("#calculation-results"),
   resultSummary: document.querySelector("#result-summary"),
   refreshHistory: document.querySelector("#refresh-history"),
+  historyForm: document.querySelector("#history-form"),
+  historyItem: document.querySelector("#history-item"),
+  historyOutcome: document.querySelector("#history-outcome"),
+  historyOrder: document.querySelector("#history-order"),
+  historyLimit: document.querySelector("#history-limit"),
+  historyPrevious: document.querySelector("#history-previous"),
+  historyNext: document.querySelector("#history-next"),
+  historyPageSummary: document.querySelector("#history-page-summary"),
   historyMessage: document.querySelector("#history-message"),
   historyResults: document.querySelector("#history-results"),
   assistantStatus: document.querySelector("#assistant-status"),
@@ -35,6 +43,18 @@ const profitColumns = [
   { label: "总收益", value: (record) => formatPrice(record.total_profit), numeric: true, signed: true },
   { label: "挂刀比例", value: (record) => Number(record.knife_ratio).toFixed(6), numeric: true },
 ];
+
+const historyColumns = [
+  { label: "记录", value: (record) => `#${record.id}`, numeric: true },
+  { label: "保存时间", value: (record) => formatTimestamp(record.created_at) },
+  ...profitColumns,
+];
+
+const historyState = {
+  offset: 0,
+  total: 0,
+  limit: 20,
+};
 
 async function requestJSON(path, options = {}) {
   const response = await fetch(path, options);
@@ -76,6 +96,17 @@ function formatPrice(value) {
   return Number(value).toFixed(3);
 }
 
+function formatTimestamp(value) {
+  const timestamp = new Date(value);
+  if (Number.isNaN(timestamp.getTime())) {
+    return value || "—";
+  }
+  return new Intl.DateTimeFormat("zh-CN", {
+    dateStyle: "medium",
+    timeStyle: "medium",
+  }).format(timestamp);
+}
+
 function emptyState(message) {
   const state = document.createElement("div");
   state.className = "empty-state";
@@ -83,7 +114,7 @@ function emptyState(message) {
   return state;
 }
 
-function renderProfitTable(container, records, emptyMessage) {
+function renderProfitTable(container, records, emptyMessage, columns = profitColumns) {
   container.replaceChildren();
   if (!records.length) {
     container.append(emptyState(emptyMessage));
@@ -93,7 +124,7 @@ function renderProfitTable(container, records, emptyMessage) {
   const table = document.createElement("table");
   const head = document.createElement("thead");
   const headRow = document.createElement("tr");
-  for (const column of profitColumns) {
+  for (const column of columns) {
     const cell = document.createElement("th");
     cell.scope = "col";
     cell.textContent = column.label;
@@ -104,7 +135,7 @@ function renderProfitTable(container, records, emptyMessage) {
   const body = document.createElement("tbody");
   for (const record of records) {
     const row = document.createElement("tr");
-    for (const column of profitColumns) {
+    for (const column of columns) {
       const cell = document.createElement("td");
       const value = column.value(record);
       cell.textContent = value;
@@ -380,15 +411,45 @@ async function loadHistory() {
   setButtonBusy(elements.refreshHistory, true, "加载中");
   setMessage(elements.historyMessage, "正在读取服务端记录…");
   try {
-    const data = await requestJSON("/api/v1/records");
-    renderProfitTable(elements.historyResults, data.records, "还没有历史记录，完成一次计算后会显示在这里。");
-    setMessage(elements.historyMessage, `已载入 ${data.records.length} 条记录`, "success");
+    const parameters = new URLSearchParams({
+      outcome: elements.historyOutcome.value,
+      order: elements.historyOrder.value,
+      limit: elements.historyLimit.value,
+      offset: String(historyState.offset),
+    });
+    const item = elements.historyItem.value.trim();
+    if (item) {
+      parameters.set("item", item);
+    }
+    const data = await requestJSON(`/api/v1/records?${parameters}`);
+    historyState.total = data.pagination.total;
+    historyState.limit = data.pagination.limit;
+    historyState.offset = data.pagination.offset;
+    renderProfitTable(
+      elements.historyResults,
+      data.records,
+      "当前筛选下没有记录。完成一次计算或调整筛选条件后再试。",
+      historyColumns,
+    );
+    updateHistoryPagination(data.pagination, data.records.length);
+    setMessage(elements.historyMessage, `服务端共找到 ${data.pagination.total} 条匹配记录`, "success");
   } catch (error) {
-    renderProfitTable(elements.historyResults, [], "历史记录暂时不可用");
+    renderProfitTable(elements.historyResults, [], "历史记录暂时不可用", historyColumns);
+    elements.historyPrevious.disabled = true;
+    elements.historyNext.disabled = true;
+    elements.historyPageSummary.textContent = "无法读取分页状态";
     setMessage(elements.historyMessage, error.message, "error");
   } finally {
     setButtonBusy(elements.refreshHistory, false, "");
   }
+}
+
+function updateHistoryPagination(pagination, recordCount) {
+  const start = recordCount ? pagination.offset + 1 : 0;
+  const end = pagination.offset + recordCount;
+  elements.historyPageSummary.textContent = `第 ${start}–${end} 条 · 共 ${pagination.total} 条`;
+  elements.historyPrevious.disabled = pagination.offset === 0;
+  elements.historyNext.disabled = !pagination.has_more;
 }
 
 elements.lookupForm.addEventListener("submit", async (event) => {
@@ -431,6 +492,7 @@ elements.calculationForm.addEventListener("submit", async (event) => {
     renderProfitTable(elements.calculationResults, data.records, "暂无计算结果");
     updateResultSummary(data.records);
     setMessage(elements.calculationMessage, `已验证并保存 ${data.records.length} 个场景`, "success");
+    historyState.offset = 0;
     await loadHistory();
   } catch (error) {
     setMessage(elements.calculationMessage, error.message, "error");
@@ -440,6 +502,24 @@ elements.calculationForm.addEventListener("submit", async (event) => {
 });
 
 elements.refreshHistory.addEventListener("click", loadHistory);
+
+elements.historyForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  historyState.offset = 0;
+  await loadHistory();
+});
+
+elements.historyPrevious.addEventListener("click", async () => {
+  historyState.offset = Math.max(0, historyState.offset - historyState.limit);
+  await loadHistory();
+});
+
+elements.historyNext.addEventListener("click", async () => {
+  if (historyState.offset + historyState.limit < historyState.total) {
+    historyState.offset += historyState.limit;
+    await loadHistory();
+  }
+});
 
 document.querySelectorAll("[data-assistant-prompt]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -504,7 +584,7 @@ elements.assistantForm.addEventListener("submit", async (event) => {
 
 renderLookupTable([]);
 renderProfitTable(elements.calculationResults, [], "输入条件后，本次计算结果会显示在这里。");
-renderProfitTable(elements.historyResults, [], "正在载入历史记录…");
+renderProfitTable(elements.historyResults, [], "正在载入历史记录…", historyColumns);
 checkHealth();
 checkAssistantStatus();
 loadHistory();

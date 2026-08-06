@@ -43,7 +43,8 @@ body {
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
@@ -699,7 +700,8 @@ a {
 }
 
 input,
-textarea {
+textarea,
+select {
   width: 100%;
   border: 1px solid var(--line-strong);
   border-radius: 11px;
@@ -714,6 +716,11 @@ input {
   padding: 0 13px;
 }
 
+select {
+  height: 44px;
+  padding: 0 34px 0 13px;
+}
+
 textarea {
   min-height: 92px;
   resize: vertical;
@@ -722,7 +729,8 @@ textarea {
 }
 
 input:focus,
-textarea:focus {
+textarea:focus,
+select:focus {
   border-color: rgba(215, 255, 69, 0.72);
   background: #0b1713;
   box-shadow: 0 0 0 3px rgba(215, 255, 69, 0.08);
@@ -731,6 +739,42 @@ textarea:focus {
 input::placeholder,
 textarea::placeholder {
   color: #586760;
+}
+
+.history-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.7fr) repeat(3, minmax(120px, 0.8fr)) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(5, 12, 10, 0.28);
+}
+
+.history-filter-button {
+  white-space: nowrap;
+}
+
+.history-pagination {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  align-items: center;
+  margin-top: 18px;
+}
+
+.history-pagination span {
+  min-width: 150px;
+  color: var(--muted);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+  text-align: center;
+}
+
+.quiet-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
 }
 
 .primary-button,
@@ -920,6 +964,15 @@ footer {
     border-right: 0;
     border-bottom: 1px solid var(--line-strong);
   }
+
+  .history-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .history-search-field,
+  .history-filter-button {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 680px) {
@@ -954,8 +1007,14 @@ footer {
   }
 
   .inline-form,
-  .calculation-form {
+  .calculation-form,
+  .history-toolbar {
     grid-template-columns: 1fr;
+  }
+
+  .history-search-field,
+  .history-filter-button {
+    grid-column: auto;
   }
 
   .wide-field {
@@ -964,9 +1023,14 @@ footer {
 
   .form-action,
   .horizontal-heading,
+  .history-pagination,
   footer {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .history-pagination span {
+    order: -1;
   }
 
   .form-action .primary-button {
