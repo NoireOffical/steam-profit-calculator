@@ -1,5 +1,7 @@
-APP := steam-profit
-PACKAGE := ./cmd/steam-profit
+CLI_APP := steam-profit
+SERVER_APP := steam-profit-server
+CLI_PACKAGE := ./cmd/steam-profit
+SERVER_PACKAGE := ./cmd/steam-profit-server
 BUILD_DIR := .build
 GO_LDFLAGS :=
 POST_BUILD := true
@@ -9,12 +11,17 @@ GO_LDFLAGS := -linkmode=external
 POST_BUILD := codesign --force --sign -
 endif
 
-.PHONY: build check clean fmt fmt-check test test-race vet
+.PHONY: build check clean fmt fmt-check run-web test test-race vet
 
 build:
 	mkdir -p $(BUILD_DIR)
-	go build -trimpath -ldflags="$(GO_LDFLAGS)" -o $(BUILD_DIR)/$(APP) $(PACKAGE)
-	$(POST_BUILD) $(BUILD_DIR)/$(APP)
+	go build -trimpath -ldflags="$(GO_LDFLAGS)" -o $(BUILD_DIR)/$(CLI_APP) $(CLI_PACKAGE)
+	$(POST_BUILD) $(BUILD_DIR)/$(CLI_APP)
+	go build -trimpath -ldflags="$(GO_LDFLAGS)" -o $(BUILD_DIR)/$(SERVER_APP) $(SERVER_PACKAGE)
+	$(POST_BUILD) $(BUILD_DIR)/$(SERVER_APP)
+
+run-web:
+	go run $(SERVER_PACKAGE)
 
 fmt:
 	gofmt -w cmd internal

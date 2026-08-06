@@ -1,10 +1,10 @@
-# Steam Profit Calculator：Steam 挂刀收益计算 CLI
+# Steam Profit Calculator：Steam 市场收益分析工作台
 
 [![CI](https://github.com/NoireOffical/steam-profit-calculator/actions/workflows/ci.yml/badge.svg)](https://github.com/NoireOffical/steam-profit-calculator/actions/workflows/ci.yml)
 
 简体中文 | [English](README.md)
 
-Steam Profit Calculator 是一个使用 Go 编写的 Steam Community Market 收益分析命令行工具。它支持查询市场商品、按一个或多个卖价正向计算收益、根据目标收益或挂刀比例反推买卖价格、批量导入 CSV 场景，以及在本地持久化和展示计算记录。
+Steam Profit Calculator 是一个使用 Go 编写的 Steam Community Market 收益分析应用。它同时提供浏览器工作台和命令行工具，支持查询市场商品、按一个或多个卖价正向计算收益、根据目标收益或挂刀比例反推买卖价格、批量导入 CSV 场景，以及在服务端持久化和展示计算记录。
 
 项目刻意保持计算公式、存储格式、外部 provider 行为和错误处理清晰可见，可作为领域建模、CLI 设计、外部 API 集成和兼容性数据迁移的小型工程示例。
 
@@ -12,7 +12,8 @@ Steam Profit Calculator 是一个使用 Go 编写的 Steam Community Market 收�
 
 ## 核心能力
 
-- 提供 `lookup`、`add`、`reverse`、`import`、`list` 五个独立命令；
+- 提供同源浏览器工作台和版本化 JSON API；
+- 保留 `lookup`、`add`、`reverse`、`import`、`list` 五个独立 CLI 命令；
 - 一次传入多个卖价，批量计算不同退出价格下的收益；
 - 根据目标单件收益、目标总收益或挂刀比例反推买价/卖价；
 - 支持数量和净倍率配置，默认净倍率为 `0.837`；
@@ -28,7 +29,9 @@ Steam Profit Calculator 是一个使用 Go 编写的 Steam Community Market 收�
 
 ```mermaid
 flowchart LR
-    A["CLI 命令"] --> B{"工作流"}
+    W["浏览器工作台"] --> A["JSON API"]
+    A --> B{"工作流"}
+    L["CLI 命令"] --> B
     B -->|"lookup"| C["Provider 环境配置"]
     C --> D["Steam 公开市场客户端"]
     D --> E["标准化商品摘要"]
@@ -40,7 +43,7 @@ flowchart LR
 
     H --> I["CSV 本地存储"]
     I --> J["旧格式兼容与迁移"]
-    E --> K["表格 / CSV 渲染"]
+    E --> K["浏览器 / 表格 / CSV 渲染"]
     H --> K
     J --> K
 ```
@@ -77,6 +80,35 @@ make build
 ```bash
 make check
 ```
+
+## 浏览器工作台
+
+启动本地 Web 应用：
+
+```bash
+make run-web
+```
+
+然后打开 `http://127.0.0.1:8080`。页面可以查询商品、提交多个卖价场景、查看服务端计算结果和刷新历史记录。所有公式仍由现有 Go 领域层执行，浏览器不会复制收益公式。
+
+服务端也可以从已构建的单一二进制启动：
+
+```bash
+make build
+./.build/steam-profit-server --addr 127.0.0.1:8080 --file ./steam-profit-records.csv
+```
+
+首个版本提供以下 API：
+
+| 方法与路径 | 用途 |
+| --- | --- |
+| `GET /api/health` | 健康检查 |
+| `GET /api/v1/items` | 查询标准化市场商品 |
+| `POST /api/v1/calculations` | 计算并保存正向收益场景 |
+| `POST /api/v1/reverse-calculations` | 反推并保存目标价格 |
+| `GET /api/v1/records` | 读取服务端历史记录 |
+
+当前 Web 版本面向本地单用户实践，仍使用 CSV 存储。公开部署前需要完成数据库、身份认证、限流和 AI 评测里程碑。
 
 ## 命令总览
 
@@ -217,6 +249,7 @@ item_name,buy_price,sell_price,quantity,net_profit,total_profit,knife_ratio,fee
 
 ```text
 cmd/steam-profit/        CLI 入口
+cmd/steam-profit-server/ Web 服务入口
 internal/calculation/    正向计算与反向求解
 internal/cli/            参数解析与工作流编排
 internal/display/        表格和 CSV 输出
@@ -224,6 +257,7 @@ internal/domain/         请求、记录与字段模型
 internal/importer/       原子化批量导入
 internal/lookup/         Provider 配置与 HTTP 客户端
 internal/storage/        CSV 存储和格式兼容
+internal/webapi/         JSON API 与嵌入式浏览器应用
 openspec/                需求规范与历史变更
 ```
 
@@ -234,11 +268,14 @@ make fmt
 make vet
 make test-race
 make build
+make run-web
 ```
 
 每次向 `main` 推送或提交 Pull Request，GitHub Actions 都会在 Linux 和 macOS 执行同一组检查。Dependabot 每周检查 Go 模块和 GitHub Actions 版本。
 
 完整命令参数、字段说明和错误示例见 [CLI_USAGE.md](CLI_USAGE.md)。
+
+AI 功能、数据库、评测与公开部署的剩余范围见 [AI 全栈实践路线与工作量评估](docs/AI_FULLSTACK_ROADMAP.zh-CN.md)。
 
 ## 许可证
 

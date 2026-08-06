@@ -1,20 +1,21 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  Tech stack: Go 1.21 standard library, embedded HTML/CSS/JavaScript, CSV persistence.
+  Product: Steam market lookup and deterministic profit scenario analysis.
+  Architecture: cmd entrypoints delegate to internal domain, lookup, storage, CLI, and web API packages.
+  Invariant: Profit formulas and rounding belong to the Go domain layer; clients and future AI models must not reproduce them.
+  Compatibility: Existing CLI commands and historical CSV schemas must remain readable unless a proposal explicitly migrates them.
+  Quality gate: gofmt, go vet, race-enabled tests, both binary builds, and documentation updates.
+  Change style: Conventional commit messages and spec-driven changes with explicit goals, non-goals, risks, and rollback.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+rules:
+  proposal:
+    - State whether CLI, API, storage, or persisted schemas change.
+    - Keep deterministic calculations outside model-generated behavior.
+  design:
+    - Include failure semantics, security boundaries, and rollback behavior.
+    - Describe how AI output is grounded in tool-produced values when AI is in scope.
+  tasks:
+    - Include automated tests, documentation, and a manual smoke test.
+    - Separate model integration, evaluation, and deployment tasks so each can be verified independently.

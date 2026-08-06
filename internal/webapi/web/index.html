@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Steam 市场收益计算、商品查询与交易方案记录工作台。">
+    <title>Steam Profit Lab</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Steam Profit Lab 首页">
+          <span class="brand-mark" aria-hidden="true">SP</span>
+          <span>
+            <strong>Steam Profit</strong>
+            <small>Market decision lab</small>
+          </span>
+        </a>
+        <div id="system-status" class="status-chip" aria-live="polite">
+          <span class="status-dot" aria-hidden="true"></span>
+          正在连接计算引擎
+        </div>
+      </header>
+
+      <main>
+        <section class="hero" aria-labelledby="page-title">
+          <div class="hero-copy">
+            <p class="eyebrow">DETERMINISTIC MARKET INTELLIGENCE</p>
+            <h1 id="page-title">先验证数字，<br><span>再形成判断。</span></h1>
+            <p class="hero-lead">查询真实市场摘要，用同一套服务端公式比较多个卖价，并把每次分析留在可追溯的历史记录中。</p>
+          </div>
+          <div class="formula-card" aria-label="当前收益模型">
+            <div class="formula-card-header">
+              <span>计算模型</span>
+              <span class="verified-label">SERVER VERIFIED</span>
+            </div>
+            <p><code>净收益 = 卖价 × 净倍率 − 买价</code></p>
+            <div class="formula-meta">
+              <span>默认倍率 <strong>0.837</strong></span>
+              <span>支持多卖价比较</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="workspace" aria-label="收益分析工作区">
+          <article class="panel search-panel">
+            <div class="panel-heading">
+              <div>
+                <span class="step-number">01</span>
+                <h2>定位市场商品</h2>
+              </div>
+              <p>从 Steam 公开市场确认规范名称和挂牌概况。</p>
+            </div>
+            <form id="lookup-form" class="inline-form">
+              <label class="field field-grow">
+                <span>商品关键词</span>
+                <input id="lookup-query" name="query" type="search" placeholder="例如：AK-47 Redline" autocomplete="off" required>
+              </label>
+              <label class="field compact-field">
+                <span>结果数</span>
+                <input id="lookup-limit" name="limit" type="number" min="1" max="50" value="5" required>
+              </label>
+              <button class="primary-button" type="submit">查询市场</button>
+            </form>
+            <p id="lookup-message" class="message" aria-live="polite"></p>
+            <div id="lookup-results" class="table-shell" tabindex="0" aria-label="商品查询结果"></div>
+          </article>
+
+          <article class="panel calculation-panel">
+            <div class="panel-heading">
+              <div>
+                <span class="step-number">02</span>
+                <h2>构建收益场景</h2>
+              </div>
+              <p>输入一次买入条件，同时比较多个目标卖价。</p>
+            </div>
+            <form id="calculation-form" class="calculation-form">
+              <label class="field wide-field">
+                <span>商品名称</span>
+                <input id="item-name" name="item_name" type="text" placeholder="可从上方查询结果带入" required>
+              </label>
+              <label class="field">
+                <span>买入价</span>
+                <input id="buy-price" name="buy_price" type="number" min="0.001" step="0.001" placeholder="0.480" required>
+              </label>
+              <label class="field">
+                <span>数量</span>
+                <input id="quantity" name="quantity" type="number" min="1" step="1" value="1" required>
+              </label>
+              <label class="field">
+                <span>净倍率</span>
+                <input id="multiplier" name="multiplier" type="number" min="0.001" max="1" step="0.001" value="0.837" required>
+              </label>
+              <label class="field wide-field">
+                <span>目标卖价</span>
+                <textarea id="sell-prices" name="sell_prices" rows="3" placeholder="0.70, 0.80, 0.95" required></textarea>
+                <small>使用逗号、空格或换行分隔多个价格。</small>
+              </label>
+              <div class="form-action wide-field">
+                <p id="calculation-message" class="message" aria-live="polite"></p>
+                <button class="primary-button accent-button" type="submit">计算并保存</button>
+              </div>
+            </form>
+          </article>
+        </section>
+
+        <section class="results-grid" aria-label="分析结果">
+          <article class="panel results-panel">
+            <div class="panel-heading horizontal-heading">
+              <div>
+                <span class="step-number">03</span>
+                <h2>本次计算</h2>
+              </div>
+              <div id="result-summary" class="result-summary">等待新的计算场景</div>
+            </div>
+            <div id="calculation-results" class="table-shell" tabindex="0" aria-label="本次计算结果"></div>
+          </article>
+
+          <article class="panel history-panel">
+            <div class="panel-heading horizontal-heading">
+              <div>
+                <span class="step-number">04</span>
+                <h2>历史记录</h2>
+              </div>
+              <button id="refresh-history" class="quiet-button" type="button">刷新</button>
+            </div>
+            <p id="history-message" class="message" aria-live="polite"></p>
+            <div id="history-results" class="table-shell" tabindex="0" aria-label="历史计算记录"></div>
+          </article>
+        </section>
+
+        <section class="next-milestone" aria-labelledby="next-title">
+          <div>
+            <p class="eyebrow">NEXT MILESTONE</p>
+            <h2 id="next-title">AI 策略助手将调用这套可信工具</h2>
+          </div>
+          <p>下一阶段会加入自然语言目标解析、工具调用和结果解释。模型不会自行计算价格，而是引用这里已经验证并保存的结果。</p>
+        </section>
+      </main>
+
+      <footer>
+        <span>Steam Profit Lab</span>
+        <span>数据仅供研究，不构成投资或交易建议。</span>
+      </footer>
+    </div>
+  </body>
+</html>

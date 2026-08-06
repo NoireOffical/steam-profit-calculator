@@ -53,6 +53,4 @@ jobs:
         run: go test -race -coverprofile=coverage.out ./...
 
       - name: Build
-        run: |
-          mkdir -p .build
-          go build -trimpath -o .build/steam-profit ./cmd/steam-profit
+        run: make build

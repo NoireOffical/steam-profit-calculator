@@ -4,7 +4,7 @@
 
 [简体中文](README.zh-CN.md) | English
 
-Steam Profit Calculator is a Go command-line tool for evaluating Steam Community Market trade scenarios. It can look up market items, calculate profit for one or more sell prices, solve buy or sell prices from a target, import scenarios from CSV, and persist normalized results locally.
+Steam Profit Calculator is a Go application for evaluating Steam Community Market trade scenarios. It provides both a browser workbench and a CLI for looking up market items, calculating profit across one or more sell prices, solving prices from targets, importing CSV scenarios, and persisting normalized results on the server.
 
 The project keeps its formulas, storage schema, provider behavior, and error handling explicit. It is intended as a small, testable example of domain modeling, CLI design, external API integration, and backward-compatible CSV persistence.
 
@@ -12,7 +12,8 @@ The project keeps its formulas, storage schema, provider behavior, and error han
 
 ## What it demonstrates
 
-- Five focused commands: `lookup`, `add`, `reverse`, `import`, and `list`
+- A same-origin browser workbench and versioned JSON API
+- Five compatible CLI commands: `lookup`, `add`, `reverse`, `import`, and `list`
 - Forward calculations for multiple sell prices in one invocation
 - Reverse calculations from target per-item profit, total profit, or knife ratio
 - Configurable quantity and net multiplier, with a default multiplier of `0.837`
@@ -28,7 +29,9 @@ The project keeps its formulas, storage schema, provider behavior, and error han
 
 ```mermaid
 flowchart LR
-    A["CLI commands"] --> B{"Workflow"}
+    W["Browser workbench"] --> A["JSON API"]
+    A --> B{"Workflow"}
+    L["CLI commands"] --> B
     B -->|"lookup"| C["Provider configuration"]
     C --> D["Steam public market client"]
     D --> E["Normalized item summaries"]
@@ -40,7 +43,7 @@ flowchart LR
 
     H --> I["CSV storage"]
     I --> J["Legacy schema migration"]
-    E --> K["Table / CSV renderer"]
+    E --> K["Browser / table / CSV renderer"]
     H --> K
     J --> K
 ```
@@ -77,6 +80,35 @@ Run the complete local quality gate:
 ```bash
 make check
 ```
+
+## Browser workbench
+
+Start the local web application:
+
+```bash
+make run-web
+```
+
+Open `http://127.0.0.1:8080`. The page can search for items, submit multiple sell-price scenarios, display server-calculated results, and refresh persisted history. All formulas remain in the Go domain layer and are not duplicated in browser code.
+
+The server can also run from the embedded single binary:
+
+```bash
+make build
+./.build/steam-profit-server --addr 127.0.0.1:8080 --file ./steam-profit-records.csv
+```
+
+Initial API routes:
+
+| Method and path | Purpose |
+| --- | --- |
+| `GET /api/health` | Health check |
+| `GET /api/v1/items` | Search normalized market items |
+| `POST /api/v1/calculations` | Calculate and persist forward scenarios |
+| `POST /api/v1/reverse-calculations` | Solve and persist a target price |
+| `GET /api/v1/records` | Read server-side history |
+
+This first web milestone is a local, single-user application and still uses CSV persistence. A database, authentication, rate limiting, and AI evaluation are required before public deployment.
 
 ## Commands
 
@@ -217,6 +249,7 @@ Older five- and seven-column files remain readable and are migrated when new rec
 
 ```text
 cmd/steam-profit/        CLI entry point
+cmd/steam-profit-server/ Web server entry point
 internal/calculation/    Forward and reverse formulas
 internal/cli/            Command parsing and orchestration
 internal/display/        Table and CSV rendering
@@ -224,6 +257,7 @@ internal/domain/         Requests, records, and field schemas
 internal/importer/       Atomic batch parsing
 internal/lookup/         Provider configuration and HTTP client
 internal/storage/        CSV persistence and schema compatibility
+internal/webapi/         JSON API and embedded browser application
 openspec/                Requirements and archived change history
 ```
 
@@ -234,11 +268,14 @@ make fmt
 make vet
 make test-race
 make build
+make run-web
 ```
 
 Every push and pull request to `main` runs the same checks on Linux and macOS. Dependabot checks Go modules and GitHub Actions weekly.
 
 For the complete command reference, field definitions, and error examples, see [CLI_USAGE.md](CLI_USAGE.md).
+
+For the remaining AI, database, evaluation, and deployment scope, see the [AI full-stack roadmap and workload estimate](docs/AI_FULLSTACK_ROADMAP.zh-CN.md) (Chinese).
 
 ## License
 
