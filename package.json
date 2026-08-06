@@ -1,0 +1,12 @@
+{
+  "name": "steam-profit-calculator-e2e",
+  "private": true,
+  "packageManager": "pnpm@11.16.0",
+  "scripts": {
+    "e2e": "playwright test",
+    "e2e:install": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1"
+  }
+}

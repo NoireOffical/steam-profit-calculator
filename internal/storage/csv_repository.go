@@ -25,6 +25,20 @@ func NewCSVRepository(path string) *CSVRepository {
 	return &CSVRepository{path: path, store: NewCSVStore(path), now: time.Now}
 }
 
+// HealthCheck verifies that an existing compatibility file remains readable.
+// A missing file is healthy because the first successful append creates it.
+func (r *CSVRepository) HealthCheck(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, err := r.store.List(); err != nil {
+		return fmt.Errorf("read CSV repository: %w", err)
+	}
+	return nil
+}
+
 // Append writes through the existing compatible CSV store.
 func (r *CSVRepository) Append(ctx context.Context, records []domain.ProfitRecord) ([]StoredProfitRecord, error) {
 	if err := ctx.Err(); err != nil {

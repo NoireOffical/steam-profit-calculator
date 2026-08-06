@@ -9,6 +9,9 @@
 /steam-profit.db-shm
 /steam-profit.db-wal
 /.build/
+/node_modules/
+/playwright-report/
+/test-results/
 /.tools/
 *.test
 coverage.out

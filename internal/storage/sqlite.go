@@ -66,6 +66,21 @@ func OpenSQLiteRepository(path string) (*SQLiteRepository, error) {
 	return openSQLiteRepository(path, time.Now)
 }
 
+// HealthCheck verifies that the live connection can read the migration ledger.
+func (r *SQLiteRepository) HealthCheck(ctx context.Context) error {
+	if r == nil || r.db == nil {
+		return fmt.Errorf("SQLite repository is unavailable")
+	}
+	var version int
+	if err := r.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&version); err != nil {
+		return fmt.Errorf("read SQLite migration ledger: %w", err)
+	}
+	if version != currentSchemaVersion {
+		return fmt.Errorf("SQLite schema version %d is not ready", version)
+	}
+	return nil
+}
+
 func openSQLiteRepository(path string, now func() time.Time) (*SQLiteRepository, error) {
 	if strings.TrimSpace(path) == "" {
 		return nil, fmt.Errorf("database path is required")

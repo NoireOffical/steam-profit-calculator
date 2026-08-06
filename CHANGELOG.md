@@ -2,7 +2,23 @@
 
 All notable demonstrable milestones are recorded here. Until the public-operation requirements are complete, each version is published as a GitHub Pre-release with an immutable annotated tag.
 
-## [v0.3.0] - Unreleased
+## [v0.4.0] - Unreleased
+
+### Added
+
+- Four isolated Playwright Chromium workflows for persisted calculation, history pagination, invalid input, and AI-disabled fallback.
+- Deterministic 12-row demo seed imported through the existing idempotent CSV path.
+- Non-root multi-stage container image and Compose runtime with a named SQLite volume and health check.
+- Request correlation IDs, content-free structured logs, and aggregate request/assistant metrics.
+- Dependency-aware health checks for SQLite and legacy CSV repositories.
+- CI browser and container persistence gates plus a demo, backup, restore, and rollback runbook.
+
+### Compatibility
+
+- CLI commands, calculation formulas, CSV schemas, SQLite schema, prompt version, and existing JSON workflows remain unchanged.
+- Metrics are process-local and reset on restart; the container remains a single SQLite-backed application instance.
+
+## [v0.3.0] - 2026-08-06
 
 ### Added
 
@@ -49,5 +65,6 @@ All notable demonstrable milestones are recorded here. Until the public-operatio
 - The existing CLI and historical CSV files remain compatible.
 - The milestone is local, single-user, and does not require a model provider.
 
+[v0.3.0]: https://github.com/NoireOffical/steam-profit-calculator/releases/tag/v0.3.0
 [v0.2.0]: https://github.com/NoireOffical/steam-profit-calculator/releases/tag/v0.2.0
 [v0.1.0]: https://github.com/NoireOffical/steam-profit-calculator/releases/tag/v0.1.0

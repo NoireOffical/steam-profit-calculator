@@ -220,6 +220,9 @@ func TestSQLiteRepositoryDependencyFailureIsReturned(t *testing.T) {
 	if _, err := repository.Query(context.Background(), RecordQuery{}); err == nil {
 		t.Fatal("Query() error = nil after dependency close")
 	}
+	if err := repository.HealthCheck(context.Background()); err == nil {
+		t.Fatal("HealthCheck() error = nil after dependency close")
+	}
 }
 
 func TestSQLiteRepositoryImportCSVIsAtomicAndIdempotent(t *testing.T) {
@@ -315,6 +318,19 @@ func TestCSVRepositorySupportsLegacyWebMode(t *testing.T) {
 	}
 	if page.Total != 1 || page.Records[0].Record.ItemName != "Beta" {
 		t.Fatalf("Query() page = %#v", page)
+	}
+	if err := repository.HealthCheck(context.Background()); err != nil {
+		t.Fatalf("HealthCheck() error = %v", err)
+	}
+}
+
+func TestCSVRepositoryHealthCheckRejectsInvalidExistingFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "records.csv")
+	if err := os.WriteFile(path, []byte("not,a,compatible,header\n"), 0o644); err != nil {
+		t.Fatalf("write invalid CSV: %v", err)
+	}
+	if err := NewCSVRepository(path).HealthCheck(context.Background()); err == nil {
+		t.Fatal("HealthCheck() error = nil for invalid CSV")
 	}
 }
 

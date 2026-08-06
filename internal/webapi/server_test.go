@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +15,7 @@ import (
 	"steam-profit-calculator/internal/assistant"
 	"steam-profit-calculator/internal/domain"
 	"steam-profit-calculator/internal/lookup"
+	"steam-profit-calculator/internal/observability"
 	"steam-profit-calculator/internal/storage"
 	"steam-profit-calculator/internal/webapi"
 )
@@ -34,6 +37,7 @@ type memoryRecordStore struct {
 	listErr   error
 	query     storage.RecordQuery
 	queries   int
+	healthErr error
 }
 
 type stubAssistantModel struct {
@@ -53,13 +57,18 @@ func (s *stubAssistantModel) Respond(_ context.Context, _ assistant.ModelRequest
 	if s.turns == 1 {
 		return assistant.ModelResponse{
 			State: "turn-1",
+			Usage: assistant.Usage{InputTokens: 10, OutputTokens: 3, TotalTokens: 13},
 			ToolCalls: []assistant.ToolCall{{
 				CallID: "call-1", Name: "calculate_profit",
 				Arguments: `{"item_name":"Capsule","buy_price":0.48,"quantity":1,"multiplier":0.837,"sell_prices":[0.8]}`,
 			}},
 		}, nil
 	}
-	return assistant.ModelResponse{Text: "计算结果已由工具验证 [T1]。仅供研究，不构成投资或交易建议。", RequestID: "fake-request"}, nil
+	return assistant.ModelResponse{
+		Text:      "计算结果已由工具验证 [T1]。仅供研究，不构成投资或交易建议。",
+		RequestID: "fake-request",
+		Usage:     assistant.Usage{InputTokens: 20, OutputTokens: 4, TotalTokens: 24},
+	}, nil
 }
 
 func (s *memoryRecordStore) Append(ctx context.Context, records []domain.ProfitRecord) ([]storage.StoredProfitRecord, error) {
@@ -123,6 +132,13 @@ func (s *memoryRecordStore) Query(ctx context.Context, query storage.RecordQuery
 	return page, nil
 }
 
+func (s *memoryRecordStore) HealthCheck(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return s.healthErr
+}
+
 func TestHealthEndpointAndSecurityHeaders(t *testing.T) {
 	handler := newTestHandler(t, &stubLookupClient{}, &memoryRecordStore{})
 	recorder := performRequest(handler, http.MethodGet, "/api/health", "", "")
@@ -141,6 +157,57 @@ func TestHealthEndpointAndSecurityHeaders(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Body.String(), `"status":"ok"`) {
 		t.Fatalf("body = %q, want healthy response", recorder.Body.String())
+	}
+	if requestID := recorder.Header().Get("X-Request-ID"); len(requestID) != 24 {
+		t.Fatalf("X-Request-ID = %q, want 24 hex characters", requestID)
+	}
+}
+
+func TestHealthEndpointReportsDependencyFailureSafely(t *testing.T) {
+	store := &memoryRecordStore{healthErr: errors.New("secret database detail")}
+	handler := newTestHandler(t, &stubLookupClient{}, store)
+	recorder := performRequest(handler, http.MethodGet, "/api/health", "", "")
+
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusServiceUnavailable)
+	}
+	if !strings.Contains(recorder.Body.String(), `"code":"dependency_unavailable"`) {
+		t.Fatalf("body = %s", recorder.Body.String())
+	}
+	if strings.Contains(recorder.Body.String(), "secret database detail") {
+		t.Fatalf("dependency detail leaked: %s", recorder.Body.String())
+	}
+}
+
+func TestMetricsEndpointReportsAggregateCounters(t *testing.T) {
+	metrics := observability.NewMetrics()
+	handler, err := webapi.NewHandlerWithOptions(
+		&stubLookupClient{},
+		&memoryRecordStore{},
+		nil,
+		webapi.HandlerOptions{
+			Metrics: metrics,
+			Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewHandlerWithOptions() error = %v", err)
+	}
+	performRequest(handler, http.MethodGet, "/api/health", "", "")
+	performRequest(handler, http.MethodGet, "/api/v1/records?limit=101", "", "")
+	recorder := performRequest(handler, http.MethodGet, "/api/v1/metrics", "", "")
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	payload := decodeResponse(t, recorder)
+	data := payload["data"].(map[string]any)
+	requests := data["requests"].(map[string]any)
+	if requests["total"].(float64) != 2 || requests["responses_2xx"].(float64) != 1 || requests["responses_4xx"].(float64) != 1 {
+		t.Fatalf("request metrics = %#v", requests)
+	}
+	if requests["in_flight"].(float64) != 1 {
+		t.Fatalf("metrics request should be visible as in-flight: %#v", requests)
 	}
 }
 
@@ -192,6 +259,36 @@ func TestAssistantStreamEmitsEvidenceWithoutPersistingRecords(t *testing.T) {
 	}
 }
 
+func TestAssistantCompletionUpdatesAggregateMetrics(t *testing.T) {
+	metrics := observability.NewMetrics()
+	model := &stubAssistantModel{}
+	runner, err := assistant.NewToolRunner(&stubLookupClient{})
+	if err != nil {
+		t.Fatalf("NewToolRunner() error = %v", err)
+	}
+	service, err := assistant.NewService(model, runner)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	handler, err := webapi.NewHandlerWithOptions(
+		&stubLookupClient{},
+		&memoryRecordStore{},
+		service,
+		webapi.HandlerOptions{Metrics: metrics, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))},
+	)
+	if err != nil {
+		t.Fatalf("NewHandlerWithOptions() error = %v", err)
+	}
+	recorder := performRequest(handler, http.MethodPost, "/api/v1/assistant/stream", `{"message":"calculate Capsule"}`, "application/json")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	snapshot := metrics.Snapshot()
+	if snapshot.Assistant.Runs != 1 || snapshot.Assistant.Failures != 0 || snapshot.Assistant.ToolCalls != 1 || snapshot.Assistant.TotalTokens != 37 {
+		t.Fatalf("assistant metrics = %#v", snapshot.Assistant)
+	}
+}
+
 func TestAssistantStreamRejectsInvalidJSONWithoutCallingModel(t *testing.T) {
 	model := &stubAssistantModel{}
 	handler := newAssistantTestHandler(t, &stubLookupClient{}, &memoryRecordStore{}, model)
@@ -203,13 +300,23 @@ func TestAssistantStreamRejectsInvalidJSONWithoutCallingModel(t *testing.T) {
 
 func TestAssistantProviderFailureBecomesSafeStreamError(t *testing.T) {
 	model := &stubAssistantModel{err: errors.New("secret provider detail")}
-	handler := newAssistantTestHandler(t, &stubLookupClient{}, &memoryRecordStore{}, model)
+	metrics := observability.NewMetrics()
+	handler := newAssistantTestHandlerWithOptions(
+		t,
+		&stubLookupClient{},
+		&memoryRecordStore{},
+		model,
+		webapi.HandlerOptions{Metrics: metrics},
+	)
 	recorder := performRequest(handler, http.MethodPost, "/api/v1/assistant/stream", `{"message":"hello"}`, "application/json")
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "event: error") {
 		t.Fatalf("status/body = %d %s", recorder.Code, recorder.Body.String())
 	}
 	if strings.Contains(recorder.Body.String(), "secret provider detail") {
 		t.Fatalf("provider detail leaked: %s", recorder.Body.String())
+	}
+	if snapshot := metrics.Snapshot().Assistant; snapshot.Runs != 1 || snapshot.Failures != 1 {
+		t.Fatalf("assistant metrics = %#v", snapshot)
 	}
 }
 
@@ -477,6 +584,10 @@ func newTestHandler(t *testing.T, lookupClient lookup.Client, store webapi.Recor
 }
 
 func newAssistantTestHandler(t *testing.T, lookupClient lookup.Client, store webapi.RecordStore, model assistant.Model) http.Handler {
+	return newAssistantTestHandlerWithOptions(t, lookupClient, store, model, webapi.HandlerOptions{})
+}
+
+func newAssistantTestHandlerWithOptions(t *testing.T, lookupClient lookup.Client, store webapi.RecordStore, model assistant.Model, options webapi.HandlerOptions) http.Handler {
 	t.Helper()
 	runner, err := assistant.NewToolRunner(lookupClient)
 	if err != nil {
@@ -486,9 +597,9 @@ func newAssistantTestHandler(t *testing.T, lookupClient lookup.Client, store web
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	handler, err := webapi.NewHandlerWithAssistant(lookupClient, store, service)
+	handler, err := webapi.NewHandlerWithOptions(lookupClient, store, service, options)
 	if err != nil {
-		t.Fatalf("NewHandlerWithAssistant() error = %v", err)
+		t.Fatalf("NewHandlerWithOptions() error = %v", err)
 	}
 	return handler
 }

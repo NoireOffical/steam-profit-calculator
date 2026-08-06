@@ -20,6 +20,9 @@ Steam Profit Calculator 是一个使用 Go 编写的 Steam Community Market 收�
 - Web 默认使用版本化 SQLite，记录具有稳定 ID 和 UTC 创建时间；
 - 历史记录支持服务端商品/收益筛选、稳定排序和有界分页；
 - 支持显式、幂等的 CSV 到 SQLite 导入，并保留 CSV 回滚模式；
+- 提供四条隔离的 Playwright Chromium 流程，覆盖持久化、分页、输入错误和 AI 关闭降级；
+- 提供非 root Docker Compose 演示、固定种子数据、SQLite 命名卷和健康检查；
+- 每个请求具有关联 ID，并提供不记录用户内容的结构化日志与请求/助手聚合指标；
 - 保留 `lookup`、`add`、`reverse`、`import`、`list` 五个独立 CLI 命令；
 - 一次传入多个卖价，批量计算不同退出价格下的收益；
 - 根据目标单件收益、目标总收益或挂刀比例反推买价/卖价；
@@ -30,7 +33,7 @@ Steam Profit Calculator 是一个使用 Go 编写的 Steam Community Market 收�
 - 兼容旧版 CSV 记录格式，并在后续写入时迁移为当前格式；
 - 对价格、倍率和挂刀比例执行确定性精度格式化；
 - 覆盖计算、查询、导入、展示、存储和 CLI 编排层的自动测试；
-- 使用 GitHub Actions 在 Linux/macOS 执行格式、静态检查、竞态测试和构建。
+- 使用 GitHub Actions 执行 Linux/macOS 确定性检查、真实浏览器 E2E 和容器重启持久化测试。
 
 ## 技术架构
 
@@ -66,7 +69,8 @@ flowchart LR
 ## 环境要求
 
 - Go 1.21 或更高版本；
-- Node.js（仅用于 `make check` 的浏览器脚本语法检查）；
+- Node.js 与 pnpm（用于浏览器脚本检查和可选 Playwright E2E）；
+- Docker Engine 或 Docker Desktop（仅容器演示需要）；
 - 仅 `lookup` 命令需要网络访问。
 
 正向计算、反向求解、导入、存储和记录读取完全在本地运行。Web 服务固定使用无需 CGo 的 `modernc.org/sqlite` 驱动；CLI 继续沿用原有 CSV 行为。
@@ -97,6 +101,20 @@ make build
 make check
 ```
 
+启动带 12 条固定记录的 3–5 分钟演示：
+
+```bash
+make demo-run
+```
+
+或者用带持久化命名卷的 Docker Compose 启动同一个单进程应用：
+
+```bash
+docker compose up --build --wait
+```
+
+完整演示顺序、浏览器测试、备份、恢复和回滚方法见[演示与运行手册](docs/DEMO_RUNBOOK.zh-CN.md)。
+
 ## 浏览器工作台
 
 启动本地 Web 应用：
@@ -119,6 +137,7 @@ make build
 | 方法与路径 | 用途 |
 | --- | --- |
 | `GET /api/health` | 健康检查 |
+| `GET /api/v1/metrics` | 读取不含用户内容的聚合运行指标 |
 | `GET /api/v1/items` | 查询标准化市场商品 |
 | `POST /api/v1/calculations` | 计算并保存正向收益场景 |
 | `POST /api/v1/reverse-calculations` | 反推并保存目标价格 |
@@ -147,7 +166,9 @@ Web 默认使用 SQLite。可以显式导入历史兼容 CSV，同一文件重�
 | `STEAM_PROFIT_RECORD_FILE` | `steam-profit-records.csv` | CSV 模式使用的记录路径 |
 | `STEAM_PROFIT_IMPORT_CSV` | 空 | SQLite 启动前显式导入的兼容 CSV |
 
-当前 Web 版本仍面向本地单用户实践。AI 对话无状态且不落盘；公开部署前仍需完成身份认证、限流、真实模型评测、备份和运行监控。
+每个 HTTP 响应都包含 `X-Request-ID`。请求日志只记录方法、路径、状态、耗时和关联 ID；聚合指标不记录查询字符串、请求体、Prompt、模型回答、市场数据、密钥或历史记录值。
+
+当前 Web 版本仍面向本地单用户实践。AI 对话无状态且不落盘；公开部署前仍需完成身份认证、限流、真实模型评测、托管备份、持久化监控和公网 TLS。
 
 ## AI 策略助手
 
@@ -329,8 +350,11 @@ internal/domain/         请求、记录与字段模型
 internal/importer/       原子化批量导入
 internal/lookup/         Provider 配置与 HTTP 客户端
 internal/assistant/      模型 Provider、只读工具、数值溯源和评测
+internal/observability/ 请求关联、安全日志与聚合指标
 internal/storage/        SQLite 仓储、CSV 兼容与迁移
 internal/webapi/         JSON API 与嵌入式浏览器应用
+demo/                    确定性幂等种子数据
+tests/e2e/               Playwright 浏览器工作流
 openspec/                需求规范与历史变更
 ```
 
@@ -342,9 +366,11 @@ make vet
 make test-race
 make build
 make run-web
+make e2e
+make container-check
 ```
 
-每次向 `main` 推送或提交 Pull Request，GitHub Actions 都会在 Linux 和 macOS 执行同一组检查。Dependabot 每周检查 Go 模块和 GitHub Actions 版本。
+每次向 `main` 推送或提交 Pull Request，GitHub Actions 都会执行 Linux/macOS 确定性检查、Chromium E2E 和 Compose 持久化冒烟。Dependabot 每周检查 Go 模块、JavaScript 包、容器基础镜像和 GitHub Actions。
 
 完整命令参数、字段说明和错误示例见 [CLI_USAGE.md](CLI_USAGE.md)。
 

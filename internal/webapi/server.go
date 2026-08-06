@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"steam-profit-calculator/internal/calculation"
 	"steam-profit-calculator/internal/domain"
 	"steam-profit-calculator/internal/lookup"
+	"steam-profit-calculator/internal/observability"
 	"steam-profit-calculator/internal/storage"
 )
 
@@ -37,7 +39,14 @@ type server struct {
 	lookupService *lookup.Service
 	recordStore   RecordStore
 	assistant     *assistant.Service
+	metrics       *observability.Metrics
 	static        http.Handler
+}
+
+// HandlerOptions configures process-local observability without changing API behavior.
+type HandlerOptions struct {
+	Logger  *slog.Logger
+	Metrics *observability.Metrics
 }
 
 type apiError struct {
@@ -122,11 +131,16 @@ type itemSummaryResponse struct {
 
 // NewHandler creates the complete HTTP application handler.
 func NewHandler(lookupClient lookup.Client, recordStore RecordStore) (http.Handler, error) {
-	return NewHandlerWithAssistant(lookupClient, recordStore, nil)
+	return NewHandlerWithOptions(lookupClient, recordStore, nil, HandlerOptions{})
 }
 
 // NewHandlerWithAssistant creates the HTTP application with an optional AI strategy assistant.
 func NewHandlerWithAssistant(lookupClient lookup.Client, recordStore RecordStore, assistantService *assistant.Service) (http.Handler, error) {
+	return NewHandlerWithOptions(lookupClient, recordStore, assistantService, HandlerOptions{})
+}
+
+// NewHandlerWithOptions creates the HTTP application with explicit runtime observability.
+func NewHandlerWithOptions(lookupClient lookup.Client, recordStore RecordStore, assistantService *assistant.Service, options HandlerOptions) (http.Handler, error) {
 	if lookupClient == nil {
 		return nil, fmt.Errorf("lookup client is required")
 	}
@@ -151,16 +165,26 @@ func NewHandlerWithAssistant(lookupClient lookup.Client, recordStore RecordStore
 	if err != nil {
 		return nil, fmt.Errorf("load embedded web application: %w", err)
 	}
+	metrics := options.Metrics
+	if metrics == nil {
+		metrics = observability.NewMetrics()
+	}
+	logger := options.Logger
+	if logger == nil {
+		logger = slog.New(slog.NewJSONHandler(io.Discard, nil))
+	}
 
 	app := &server{
 		lookupService: lookup.NewService(lookupClient),
 		recordStore:   recordStore,
 		assistant:     assistantService,
+		metrics:       metrics,
 		static:        http.FileServer(http.FS(web)),
 	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/health", app.handleHealth)
+	mux.HandleFunc("/api/v1/metrics", app.handleMetrics)
 	mux.HandleFunc("/api/v1/items", app.handleItems)
 	mux.HandleFunc("/api/v1/calculations", app.handleCalculations)
 	mux.HandleFunc("/api/v1/reverse-calculations", app.handleReverseCalculations)
@@ -170,7 +194,7 @@ func NewHandlerWithAssistant(lookupClient lookup.Client, recordStore RecordStore
 	mux.HandleFunc("/api/", app.handleUnknownAPI)
 	mux.Handle("/", app.static)
 
-	return securityHeaders(mux), nil
+	return metrics.HTTPMiddleware(logger, securityHeaders(mux)), nil
 }
 
 func (s *server) handleAssistantStatus(w http.ResponseWriter, r *http.Request) {
@@ -211,13 +235,26 @@ func (s *server) handleAssistantStream(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
+	s.metrics.AssistantStarted()
 	err := s.assistant.Run(ctx, request.Message, func(event assistant.Event) error {
+		if event.Completion != nil {
+			s.metrics.ObserveAssistantCompletion(observability.AssistantCompletion{
+				ElapsedMS:    event.Completion.ElapsedMS,
+				ToolCalls:    event.Completion.ToolCount,
+				InputTokens:  event.Completion.Usage.InputTokens,
+				OutputTokens: event.Completion.Usage.OutputTokens,
+				TotalTokens:  event.Completion.Usage.TotalTokens,
+			})
+		}
 		if err := writeSSE(w, event.Type, event); err != nil {
 			return err
 		}
 		flusher.Flush()
 		return nil
 	})
+	if err != nil {
+		s.metrics.AssistantFailed()
+	}
 	if err != nil && !errors.Is(err, context.Canceled) {
 		_ = writeSSE(w, "error", map[string]any{
 			"error": apiError{Code: "assistant_error", Message: "AI 策略助手暂时无法完成请求"},
@@ -230,7 +267,22 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodGet) {
 		return
 	}
+	if checker, ok := s.recordStore.(storage.HealthChecker); ok {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if err := checker.HealthCheck(ctx); err != nil {
+			writeAPIError(w, http.StatusServiceUnavailable, "dependency_unavailable", "required persistence is unavailable")
+			return
+		}
+	}
 	writeJSON(w, http.StatusOK, dataEnvelope{Data: healthResponse{Status: "ok"}})
+}
+
+func (s *server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodGet) {
+		return
+	}
+	writeJSON(w, http.StatusOK, dataEnvelope{Data: s.metrics.Snapshot()})
 }
 
 func (s *server) handleItems(w http.ResponseWriter, r *http.Request) {

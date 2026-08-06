@@ -65,6 +65,11 @@ type RecordRepository interface {
 	Query(context.Context, RecordQuery) (RecordPage, error)
 }
 
+// HealthChecker is implemented by repositories that can verify their required dependency.
+type HealthChecker interface {
+	HealthCheck(context.Context) error
+}
+
 // NormalizeRecordQuery applies defaults and validates one history query.
 func NormalizeRecordQuery(query RecordQuery) (RecordQuery, error) {
 	query.ItemPrefix = strings.TrimSpace(query.ItemPrefix)

@@ -1,12 +1,12 @@
 schema: spec-driven
 
 context: |
-  Tech stack: Go 1.21 standard library, embedded HTML/CSS/JavaScript, CSV persistence.
+  Tech stack: Go 1.21 standard library, embedded HTML/CSS/JavaScript, versioned SQLite web persistence, and compatible CLI CSV persistence.
   Product: Steam market lookup and deterministic profit scenario analysis.
   Architecture: cmd entrypoints delegate to internal domain, lookup, storage, CLI, and web API packages.
   Invariant: Profit formulas and rounding belong to the Go domain layer; clients and future AI models must not reproduce them.
   Compatibility: Existing CLI commands and historical CSV schemas must remain readable unless a proposal explicitly migrates them.
-  Quality gate: gofmt, go vet, race-enabled tests, both binary builds, and documentation updates.
+  Quality gate: gofmt, go vet, race-enabled tests, both binary builds, browser JavaScript syntax, relevant Playwright E2E, container smoke where available, and documentation updates.
   Change style: Conventional commit messages and spec-driven changes with explicit goals, non-goals, risks, and rollback.
 
 rules:

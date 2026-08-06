@@ -54,3 +54,88 @@ jobs:
 
       - name: Build
         run: make build
+
+  browser-e2e:
+    name: Chromium E2E
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: 1.21.x
+          cache: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+          package-manager-cache: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Install browser dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run browser E2E
+        run: pnpm e2e
+
+      - name: Upload browser failure report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            .build/playwright-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  container:
+    name: Container smoke
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Build and start Compose demo
+        env:
+          STEAM_PROFIT_PORT: 18081
+        run: docker compose up --build --wait
+
+      - name: Verify health, metrics, and persistence
+        env:
+          STEAM_PROFIT_PORT: 18081
+        run: |
+          curl --fail --silent --show-error http://127.0.0.1:18081/api/health
+          curl --fail --silent --show-error http://127.0.0.1:18081/api/v1/metrics
+          curl --fail --silent --show-error \
+            --request POST \
+            --header 'Content-Type: application/json' \
+            --data '{"item_name":"CI Container","buy_price":0.48,"quantity":1,"multiplier":0.837,"sell_prices":[0.8]}' \
+            http://127.0.0.1:18081/api/v1/calculations
+          docker compose up --force-recreate --wait
+          curl --fail --silent --show-error \
+            'http://127.0.0.1:18081/api/v1/records?item=CI%20Container' \
+            | grep --quiet '"total":1'
+          curl --fail --silent --show-error \
+            'http://127.0.0.1:18081/api/v1/records?item=Demo%20Capsule' \
+            | grep --quiet '"total":12'
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Stop Compose demo
+        if: always()
+        run: docker compose down --volumes

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -77,7 +78,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("create assistant: %v", err)
 	}
-	handler, err := webapi.NewHandlerWithAssistant(lookupClient, recordStore, assistantService)
+	requestLogger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	handler, err := webapi.NewHandlerWithOptions(
+		lookupClient,
+		recordStore,
+		assistantService,
+		webapi.HandlerOptions{Logger: requestLogger},
+	)
 	if err != nil {
 		log.Fatalf("create web application: %v", err)
 	}

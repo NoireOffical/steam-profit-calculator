@@ -1,0 +1,10 @@
+.build
+.git
+.github
+.tools
+node_modules
+playwright-report
+steam-profit.db*
+steam-profit-records.csv
+test-results
+coverage.out

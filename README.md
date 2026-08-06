@@ -20,6 +20,9 @@ The project keeps its formulas, storage schema, provider behavior, and error han
 - Versioned SQLite web persistence with durable record IDs and UTC timestamps
 - Server-side item/outcome filters, stable ordering, and bounded history pagination
 - Explicit, idempotent CSV-to-SQLite import plus a legacy CSV rollback mode
+- Four isolated Playwright Chromium workflows covering persistence, pagination, validation, and AI-disabled fallback
+- A non-root Docker Compose demo with deterministic seed data, a named SQLite volume, and health checks
+- Request IDs, content-free structured request logs, and aggregate request/assistant metrics
 - Five compatible CLI commands: `lookup`, `add`, `reverse`, `import`, and `list`
 - Forward calculations for multiple sell prices in one invocation
 - Reverse calculations from target per-item profit, total profit, or knife ratio
@@ -30,7 +33,7 @@ The project keeps its formulas, storage schema, provider behavior, and error han
 - Backward-compatible loading of legacy record schemas
 - Deterministic price, ratio, and multiplier formatting
 - Unit and integration tests across calculation, lookup, import, display, storage, and CLI layers
-- Linux and macOS CI with formatting, `go vet`, race detection, and release builds
+- Linux and macOS CI with formatting, `go vet`, race detection, release builds, browser E2E, and container smoke tests
 
 ## Architecture
 
@@ -66,7 +69,8 @@ flowchart LR
 ## Requirements
 
 - Go 1.21 or newer
-- Node.js for the browser-script syntax check in `make check`
+- Node.js and pnpm for browser-script checks and optional Playwright E2E
+- Docker Engine or Docker Desktop only for the container demo
 - Network access only when using `lookup`
 
 The calculator, reverse solver, importer, storage, and list workflows run entirely locally. The web server uses the pinned CGo-free `modernc.org/sqlite` driver; deterministic CLI workflows keep their existing CSV behavior.
@@ -97,6 +101,20 @@ Run the complete local quality gate:
 make check
 ```
 
+Run the seeded three-to-five-minute demo:
+
+```bash
+make demo-run
+```
+
+Or launch the same single-process application with a durable Docker volume:
+
+```bash
+docker compose up --build --wait
+```
+
+See the [demo and operations runbook](docs/DEMO_RUNBOOK.zh-CN.md) for the walkthrough, browser test, backup, restore, and rollback paths.
+
 ## Browser workbench
 
 Start the local web application:
@@ -119,6 +137,7 @@ Initial API routes:
 | Method and path | Purpose |
 | --- | --- |
 | `GET /api/health` | Health check |
+| `GET /api/v1/metrics` | Read content-free aggregate runtime metrics |
 | `GET /api/v1/items` | Search normalized market items |
 | `POST /api/v1/calculations` | Calculate and persist forward scenarios |
 | `POST /api/v1/reverse-calculations` | Solve and persist a target price |
@@ -147,7 +166,9 @@ The source CSV is never modified. Existing source rows are skipped on repeat imp
 | `STEAM_PROFIT_RECORD_FILE` | `steam-profit-records.csv` | CSV path used in legacy mode |
 | `STEAM_PROFIT_IMPORT_CSV` | empty | Compatible CSV imported before SQLite startup |
 
-This remains a local, single-user application. Assistant requests are stateless and are not persisted. Authentication, rate limiting, live-model evaluation, backups, and production observability are required before public deployment.
+Every HTTP response includes an `X-Request-ID`. Request logs contain method, path, status, duration, and request ID only; aggregate metrics omit query strings, bodies, prompts, model output, market data, credentials, and record values.
+
+This remains a local, single-user application. Assistant requests are stateless and are not persisted. Authentication, rate limiting, live-model evaluation, managed backups, persistent telemetry, and public TLS are required before public deployment.
 
 ## AI strategy assistant
 
@@ -325,8 +346,11 @@ internal/domain/         Requests, records, and field schemas
 internal/importer/       Atomic batch parsing
 internal/lookup/         Provider configuration and HTTP client
 internal/assistant/      Model provider, read-only tools, grounding, and evaluations
+internal/observability/ Request correlation, safe logs, and aggregate metrics
 internal/storage/        SQLite repository, CSV compatibility, and migration
 internal/webapi/         JSON API and embedded browser application
+demo/                    Deterministic idempotent seed dataset
+tests/e2e/               Playwright browser workflows
 openspec/                Requirements and archived change history
 ```
 
@@ -338,9 +362,11 @@ make vet
 make test-race
 make build
 make run-web
+make e2e
+make container-check
 ```
 
-Every push and pull request to `main` runs the same checks on Linux and macOS. Dependabot checks Go modules and GitHub Actions weekly.
+Every push and pull request to `main` runs deterministic checks on Linux and macOS plus Chromium E2E and a Compose persistence smoke test. Dependabot checks Go modules, JavaScript packages, container bases, and GitHub Actions weekly.
 
 For the complete command reference, field definitions, and error examples, see [CLI_USAGE.md](CLI_USAGE.md).
 
