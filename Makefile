@@ -11,7 +11,7 @@ GO_LDFLAGS := -linkmode=external
 POST_BUILD := codesign --force --sign -
 endif
 
-.PHONY: build check clean fmt fmt-check run-web test test-race vet
+.PHONY: build check clean fmt fmt-check js-check run-web test test-race vet
 
 build:
 	mkdir -p $(BUILD_DIR)
@@ -32,13 +32,16 @@ fmt-check:
 vet:
 	go vet ./...
 
+js-check:
+	node --check internal/webapi/web/app.js
+
 test:
 	go test -ldflags="$(GO_LDFLAGS)" ./...
 
 test-race:
 	go test -race -ldflags="$(GO_LDFLAGS)" ./...
 
-check: fmt-check vet test-race build
+check: fmt-check js-check vet test-race build
 
 clean:
 	rm -rf $(BUILD_DIR)

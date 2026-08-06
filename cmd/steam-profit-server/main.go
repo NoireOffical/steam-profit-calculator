@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"steam-profit-calculator/internal/assistant"
 	"steam-profit-calculator/internal/lookup"
 	"steam-profit-calculator/internal/storage"
 	"steam-profit-calculator/internal/webapi"
@@ -32,7 +33,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("load lookup configuration: %v", err)
 	}
-	handler, err := webapi.NewHandler(lookupClient, storage.NewCSVStore(*recordFile))
+	model := assistant.NewModelFromEnvironment()
+	toolRunner, err := assistant.NewToolRunner(lookupClient)
+	if err != nil {
+		log.Fatalf("create assistant tools: %v", err)
+	}
+	assistantService, err := assistant.NewService(model, toolRunner)
+	if err != nil {
+		log.Fatalf("create assistant: %v", err)
+	}
+	handler, err := webapi.NewHandlerWithAssistant(lookupClient, storage.NewCSVStore(*recordFile), assistantService)
 	if err != nil {
 		log.Fatalf("create web application: %v", err)
 	}
@@ -42,7 +52,7 @@ func main() {
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      20 * time.Second,
+		WriteTimeout:      70 * time.Second,
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    1 << 20,
 	}
@@ -59,6 +69,11 @@ func main() {
 	}()
 
 	log.Printf("Steam Profit web application available at http://%s", displayAddress(*address))
+	if status := assistantService.Status(); status.Available {
+		log.Printf("AI strategy assistant enabled with %s/%s (%s)", status.Provider, status.Model, status.PromptVersion)
+	} else {
+		log.Printf("AI strategy assistant unavailable: %s", status.Reason)
+	}
 	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("serve web application: %v", err)
 	}

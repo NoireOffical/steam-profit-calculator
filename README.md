@@ -4,7 +4,7 @@
 
 [简体中文](README.zh-CN.md) | English
 
-Steam Profit Calculator is a Go application for evaluating Steam Community Market trade scenarios. It provides both a browser workbench and a CLI for looking up market items, calculating profit across one or more sell prices, solving prices from targets, importing CSV scenarios, and persisting normalized results on the server.
+Steam Profit Calculator is a Go application for evaluating Steam Community Market trade scenarios. It provides an optional tool-grounded AI strategy assistant, a browser workbench, and a CLI for looking up market items, calculating profit across one or more sell prices, solving prices from targets, importing CSV scenarios, and persisting normalized results on the server.
 
 The project keeps its formulas, storage schema, provider behavior, and error handling explicit. It is intended as a small, testable example of domain modeling, CLI design, external API integration, and backward-compatible CSV persistence.
 
@@ -13,6 +13,10 @@ The project keeps its formulas, storage schema, provider behavior, and error han
 ## What it demonstrates
 
 - A same-origin browser workbench and versioned JSON API
+- An optional AI strategy assistant with strict read-only lookup, calculation, and reverse tools
+- SSE progress, structured evidence, answer chunks, and model-usage metadata
+- A numeric grounding guard that suppresses uncited or unsupported model numbers
+- A 30-case deterministic evaluation baseline that requires no live model credential
 - Five compatible CLI commands: `lookup`, `add`, `reverse`, `import`, and `list`
 - Forward calculations for multiple sell prices in one invocation
 - Reverse calculations from target per-item profit, total profit, or knife ratio
@@ -29,7 +33,12 @@ The project keeps its formulas, storage schema, provider behavior, and error han
 
 ```mermaid
 flowchart LR
-    W["Browser workbench"] --> A["JSON API"]
+    W["Browser workbench"] --> A["JSON API / SSE"]
+    W --> M["AI strategy assistant"]
+    M --> P["Replaceable model provider"]
+    P --> M
+    M --> T["Strict read-only tools"]
+    T --> B
     A --> B{"Workflow"}
     L["CLI commands"] --> B
     B -->|"lookup"| C["Provider configuration"]
@@ -51,6 +60,7 @@ flowchart LR
 ## Requirements
 
 - Go 1.21 or newer
+- Node.js for the browser-script syntax check in `make check`
 - Network access only when using `lookup`
 
 The calculator, reverse solver, importer, storage, and list workflows run entirely locally and use only the Go standard library.
@@ -89,7 +99,7 @@ Start the local web application:
 make run-web
 ```
 
-Open `http://127.0.0.1:8080`. The page can search for items, submit multiple sell-price scenarios, display server-calculated results, and refresh persisted history. All formulas remain in the Go domain layer and are not duplicated in browser code.
+Open `http://127.0.0.1:8080`. The page can use the AI strategy assistant, search for items, submit multiple sell-price scenarios, display server-calculated results, and refresh persisted history. All formulas remain in the Go domain layer and are not duplicated by the browser or model.
 
 The server can also run from the embedded single binary:
 
@@ -107,8 +117,37 @@ Initial API routes:
 | `POST /api/v1/calculations` | Calculate and persist forward scenarios |
 | `POST /api/v1/reverse-calculations` | Solve and persist a target price |
 | `GET /api/v1/records` | Read server-side history |
+| `GET /api/v1/assistant/status` | Read safe assistant availability metadata |
+| `POST /api/v1/assistant/stream` | Stream tool progress, evidence, and answer events over SSE |
 
-This first web milestone is a local, single-user application and still uses CSV persistence. A database, authentication, rate limiting, and AI evaluation are required before public deployment.
+This remains a local, single-user application with CSV persistence. Assistant requests are stateless and are not persisted. A database, authentication, rate limiting, live-model evaluation, and production observability are required before public deployment.
+
+## AI strategy assistant
+
+AI is disabled by default, so missing model credentials never prevent the server, deterministic browser workbench, or CLI from running. Enable the OpenAI provider with environment variables:
+
+```bash
+export STEAM_PROFIT_AI_PROVIDER=openai
+export STEAM_PROFIT_AI_API_KEY="your-api-key"
+make run-web
+```
+
+The standard `OPENAI_API_KEY` is also accepted. Keys, models, and settings are environment-only and can be replaced later; never commit a real key.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `STEAM_PROFIT_AI_PROVIDER` | `disabled` | `disabled` or `openai` |
+| `STEAM_PROFIT_AI_BASE_URL` | `https://api.openai.com/v1` | Responses API base URL |
+| `STEAM_PROFIT_AI_MODEL` | `gpt-5.6-terra` | Replaceable model name |
+| `STEAM_PROFIT_AI_REASONING_EFFORT` | `low` | `none`, `low`, `medium`, `high`, `xhigh`, or `max` |
+| `STEAM_PROFIT_AI_VERBOSITY` | `low` | `low`, `medium`, or `high` |
+| `STEAM_PROFIT_AI_MAX_OUTPUT_TOKENS` | `1200` | Maximum output tokens per model turn |
+| `STEAM_PROFIT_AI_TIMEOUT_MS` | `25000` | Per-model-request timeout |
+| `STEAM_PROFIT_AI_API_KEY` | empty | API key, preferred over `OPENAI_API_KEY` |
+
+The adapter follows OpenAI's official [Responses API function-calling flow](https://developers.openai.com/api/docs/guides/function-calling). `lookup_items`, `calculate_profit`, and `solve_target` are read-only. Every successful tool result gets a `T1`/`T2` evidence ID. Final prose must cite all applicable evidence and may contain only numbers present in tool output; otherwise the server substitutes a safe evidence-directed response.
+
+SSE event names are `status`, `tool_start`, `evidence`, `delta`, `done`, and `error`. This milestone chunks the completed provider answer into `delta` events; the stable browser contract can later carry provider-native token deltas.
 
 ## Commands
 
@@ -256,6 +295,7 @@ internal/display/        Table and CSV rendering
 internal/domain/         Requests, records, and field schemas
 internal/importer/       Atomic batch parsing
 internal/lookup/         Provider configuration and HTTP client
+internal/assistant/      Model provider, read-only tools, grounding, and evaluations
 internal/storage/        CSV persistence and schema compatibility
 internal/webapi/         JSON API and embedded browser application
 openspec/                Requirements and archived change history
@@ -276,6 +316,8 @@ Every push and pull request to `main` runs the same checks on Linux and macOS. D
 For the complete command reference, field definitions, and error examples, see [CLI_USAGE.md](CLI_USAGE.md).
 
 For the remaining AI, database, evaluation, and deployment scope, see the [AI full-stack roadmap and workload estimate](docs/AI_FULLSTACK_ROADMAP.zh-CN.md) (Chinese).
+
+Demonstrable milestones use immutable Semantic Version tags and GitHub Pre-releases. See the [release workflow](docs/development/release-workflow.md) and [changelog](CHANGELOG.md).
 
 ## License
 

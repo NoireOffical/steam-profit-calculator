@@ -17,6 +17,13 @@ const elements = {
   refreshHistory: document.querySelector("#refresh-history"),
   historyMessage: document.querySelector("#history-message"),
   historyResults: document.querySelector("#history-results"),
+  assistantStatus: document.querySelector("#assistant-status"),
+  assistantMessages: document.querySelector("#assistant-messages"),
+  assistantEvidence: document.querySelector("#assistant-evidence"),
+  assistantForm: document.querySelector("#assistant-form"),
+  assistantInput: document.querySelector("#assistant-input"),
+  assistantSubmit: document.querySelector("#assistant-submit"),
+  assistantFormHint: document.querySelector("#assistant-form-hint"),
 };
 
 const profitColumns = [
@@ -41,6 +48,15 @@ async function requestJSON(path, options = {}) {
     throw new Error(payload?.error?.message || `请求失败（${response.status}）`);
   }
   return payload.data;
+}
+
+async function readErrorResponse(response) {
+  try {
+    const payload = await response.json();
+    return payload?.error?.message || `请求失败（${response.status}）`;
+  } catch {
+    return `请求失败（${response.status}）`;
+  }
 }
 
 function setMessage(element, message = "", tone = "") {
@@ -204,6 +220,162 @@ async function checkHealth() {
   }
 }
 
+function setAssistantAvailability(status) {
+  elements.assistantStatus.classList.toggle("available", status.available);
+  elements.assistantStatus.classList.toggle("unavailable", !status.available);
+  const statusText = elements.assistantStatus.querySelector("span:last-child");
+  if (status.available) {
+    statusText.textContent = `${status.provider} · ${status.model}`;
+    elements.assistantInput.disabled = false;
+    elements.assistantSubmit.disabled = false;
+    elements.assistantFormHint.textContent = `提示词版本 ${status.prompt_version}`;
+    return;
+  }
+  statusText.textContent = status.reason || "AI 策略助手未启用";
+  elements.assistantInput.disabled = true;
+  elements.assistantSubmit.disabled = true;
+  elements.assistantFormHint.textContent = "现有查询和确定性计算仍可正常使用";
+}
+
+async function checkAssistantStatus() {
+  try {
+    const status = await requestJSON("/api/v1/assistant/status");
+    setAssistantAvailability(status);
+  } catch {
+    setAssistantAvailability({ available: false, reason: "无法读取模型状态" });
+  }
+}
+
+function appendChatMessage(role, text = "") {
+  const message = document.createElement("div");
+  message.className = `chat-message ${role === "user" ? "user-message" : "assistant-message"}`;
+  const label = document.createElement("span");
+  label.className = "message-role";
+  label.textContent = role === "user" ? "你" : "策略助手";
+  const copy = document.createElement("div");
+  copy.className = "message-copy";
+  copy.textContent = text;
+  message.append(label, copy);
+  elements.assistantMessages.append(message);
+  message.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  return { message, copy };
+}
+
+function toolLabel(tool) {
+  return {
+    lookup_items: "市场查询",
+    calculate_profit: "收益计算",
+    solve_target: "目标反推",
+  }[tool] || tool;
+}
+
+function appendToolProgress(tool) {
+  const progress = document.createElement("div");
+  progress.className = "tool-progress";
+  progress.textContent = `正在执行 · ${toolLabel(tool)}`;
+  elements.assistantMessages.append(progress);
+  return progress;
+}
+
+function appendEvidence(evidence) {
+  const card = document.createElement("article");
+  card.className = `evidence-card ${evidence.verified ? "verified" : "failed"}`;
+
+  const header = document.createElement("div");
+  header.className = "evidence-header";
+  const title = document.createElement("strong");
+  title.textContent = `${evidence.id} · ${toolLabel(evidence.tool)}`;
+  const state = document.createElement("span");
+  state.textContent = evidence.verified ? "程序已验证" : "工具未完成";
+  header.append(title, state);
+
+  const body = document.createElement("div");
+  body.className = "evidence-body";
+  if (Array.isArray(evidence.data?.records)) {
+    renderProfitTable(body, evidence.data.records, "工具没有返回记录");
+  } else if (Array.isArray(evidence.data?.items)) {
+    for (const item of evidence.data.items) {
+      const itemRow = document.createElement("div");
+      itemRow.className = "evidence-item";
+      const itemName = document.createElement("strong");
+      itemName.textContent = item.canonical_name;
+      const itemMeta = document.createElement("span");
+      itemMeta.textContent = `${item.app_name || "未知应用"} · 挂牌 ${item.sell_listings} · ${item.sell_price_text || "暂无挂牌价"}`;
+      const queryTime = document.createElement("small");
+      queryTime.textContent = `查询时间 ${item.query_time || "未知"}`;
+      itemRow.append(itemName, itemMeta, queryTime);
+      body.append(itemRow);
+    }
+  } else if (evidence.data?.error) {
+    const error = document.createElement("p");
+    error.textContent = evidence.data.error.message || "工具执行失败";
+    body.append(error);
+  }
+  card.append(header, body);
+  elements.assistantEvidence.append(card);
+}
+
+function renderCompletion(completion) {
+  const meta = document.createElement("div");
+  meta.className = `assistant-completion ${completion.grounded ? "grounded" : "guarded"}`;
+  const tokenText = completion.usage?.total_tokens
+    ? ` · ${completion.usage.total_tokens} tokens`
+    : "";
+  meta.textContent = `${completion.grounded ? "数值溯源通过" : "已启用安全替代"} · ${completion.tool_count} 次工具 · ${completion.elapsed_ms} ms${tokenText}`;
+  elements.assistantMessages.append(meta);
+}
+
+function parseSSEBlock(block) {
+  let eventName = "message";
+  const data = [];
+  for (const line of block.split("\n")) {
+    if (line.startsWith("event:")) {
+      eventName = line.slice(6).trim();
+    } else if (line.startsWith("data:")) {
+      data.push(line.slice(5).trimStart());
+    }
+  }
+  if (!data.length) {
+    return null;
+  }
+  return { eventName, payload: JSON.parse(data.join("\n")) };
+}
+
+async function streamAssistant(message, onEvent) {
+  const response = await fetch("/api/v1/assistant/stream", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+    body: JSON.stringify({ message }),
+  });
+  if (!response.ok) {
+    throw new Error(await readErrorResponse(response));
+  }
+  if (!response.body) {
+    throw new Error("当前浏览器无法读取流式响应");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done }).replaceAll("\r\n", "\n");
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary >= 0) {
+      const block = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      const event = parseSSEBlock(block);
+      if (event) {
+        onEvent(event.eventName, event.payload);
+      }
+      boundary = buffer.indexOf("\n\n");
+    }
+    if (done) {
+      break;
+    }
+  }
+}
+
 async function loadHistory() {
   setButtonBusy(elements.refreshHistory, true, "加载中");
   setMessage(elements.historyMessage, "正在读取服务端记录…");
@@ -269,8 +441,70 @@ elements.calculationForm.addEventListener("submit", async (event) => {
 
 elements.refreshHistory.addEventListener("click", loadHistory);
 
+document.querySelectorAll("[data-assistant-prompt]").forEach((button) => {
+  button.addEventListener("click", () => {
+    elements.assistantInput.value = button.dataset.assistantPrompt;
+    elements.assistantInput.focus();
+  });
+});
+
+elements.assistantForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const message = elements.assistantInput.value.trim();
+  if (!message) {
+    return;
+  }
+
+  appendChatMessage("user", message);
+  const assistantMessage = appendChatMessage("assistant", "");
+  assistantMessage.message.classList.add("streaming");
+  assistantMessage.copy.textContent = "正在连接策略模型…";
+  elements.assistantEvidence.replaceChildren();
+  elements.assistantInput.value = "";
+  setButtonBusy(elements.assistantSubmit, true, "分析中");
+  elements.assistantInput.disabled = true;
+  let hasDelta = false;
+  let toolProgress;
+
+  try {
+    await streamAssistant(message, (eventName, payload) => {
+      if (eventName === "status") {
+        assistantMessage.copy.textContent = payload.message;
+      } else if (eventName === "tool_start") {
+        toolProgress?.remove();
+        toolProgress = appendToolProgress(payload.tool);
+      } else if (eventName === "evidence") {
+        toolProgress?.remove();
+        toolProgress = undefined;
+        appendEvidence(payload.evidence);
+        assistantMessage.copy.textContent = "正在依据工具结果组织回答…";
+      } else if (eventName === "delta") {
+        if (!hasDelta) {
+          assistantMessage.copy.textContent = "";
+          hasDelta = true;
+        }
+        assistantMessage.copy.textContent += payload.text;
+      } else if (eventName === "done") {
+        renderCompletion(payload.completion);
+      } else if (eventName === "error") {
+        throw new Error(payload?.error?.message || "AI 策略助手暂时不可用");
+      }
+    });
+  } catch (error) {
+    toolProgress?.remove();
+    assistantMessage.message.classList.add("error-message");
+    assistantMessage.copy.textContent = error.message;
+  } finally {
+    assistantMessage.message.classList.remove("streaming");
+    elements.assistantInput.disabled = false;
+    setButtonBusy(elements.assistantSubmit, false, "");
+    elements.assistantInput.focus();
+  }
+});
+
 renderLookupTable([]);
 renderProfitTable(elements.calculationResults, [], "输入条件后，本次计算结果会显示在这里。");
 renderProfitTable(elements.historyResults, [], "正在载入历史记录…");
 checkHealth();
+checkAssistantStatus();
 loadHistory();

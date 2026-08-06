@@ -1,6 +1,7 @@
 package webapi
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -10,7 +11,9 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
+	"steam-profit-calculator/internal/assistant"
 	"steam-profit-calculator/internal/calculation"
 	"steam-profit-calculator/internal/domain"
 	"steam-profit-calculator/internal/lookup"
@@ -33,6 +36,7 @@ type RecordStore interface {
 type server struct {
 	lookupService *lookup.Service
 	recordStore   RecordStore
+	assistant     *assistant.Service
 	static        http.Handler
 }
 
@@ -51,6 +55,10 @@ type dataEnvelope struct {
 
 type healthResponse struct {
 	Status string `json:"status"`
+}
+
+type assistantRequest struct {
+	Message string `json:"message"`
 }
 
 type calculationRequest struct {
@@ -104,11 +112,29 @@ type itemSummaryResponse struct {
 
 // NewHandler creates the complete HTTP application handler.
 func NewHandler(lookupClient lookup.Client, recordStore RecordStore) (http.Handler, error) {
+	return NewHandlerWithAssistant(lookupClient, recordStore, nil)
+}
+
+// NewHandlerWithAssistant creates the HTTP application with an optional AI strategy assistant.
+func NewHandlerWithAssistant(lookupClient lookup.Client, recordStore RecordStore, assistantService *assistant.Service) (http.Handler, error) {
 	if lookupClient == nil {
 		return nil, fmt.Errorf("lookup client is required")
 	}
 	if recordStore == nil {
 		return nil, fmt.Errorf("record store is required")
+	}
+	if assistantService == nil {
+		toolRunner, err := assistant.NewToolRunner(lookupClient)
+		if err != nil {
+			return nil, fmt.Errorf("create disabled assistant tools: %w", err)
+		}
+		assistantService, err = assistant.NewService(
+			assistant.NewUnavailableModel("disabled", "", "AI 策略助手未启用"),
+			toolRunner,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("create disabled assistant: %w", err)
+		}
 	}
 
 	web, err := fs.Sub(embeddedWeb, "web")
@@ -119,6 +145,7 @@ func NewHandler(lookupClient lookup.Client, recordStore RecordStore) (http.Handl
 	app := &server{
 		lookupService: lookup.NewService(lookupClient),
 		recordStore:   recordStore,
+		assistant:     assistantService,
 		static:        http.FileServer(http.FS(web)),
 	}
 
@@ -128,10 +155,65 @@ func NewHandler(lookupClient lookup.Client, recordStore RecordStore) (http.Handl
 	mux.HandleFunc("/api/v1/calculations", app.handleCalculations)
 	mux.HandleFunc("/api/v1/reverse-calculations", app.handleReverseCalculations)
 	mux.HandleFunc("/api/v1/records", app.handleRecords)
+	mux.HandleFunc("/api/v1/assistant/status", app.handleAssistantStatus)
+	mux.HandleFunc("/api/v1/assistant/stream", app.handleAssistantStream)
 	mux.HandleFunc("/api/", app.handleUnknownAPI)
 	mux.Handle("/", app.static)
 
 	return securityHeaders(mux), nil
+}
+
+func (s *server) handleAssistantStatus(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodGet) {
+		return
+	}
+	writeJSON(w, http.StatusOK, dataEnvelope{Data: s.assistant.Status()})
+}
+
+func (s *server) handleAssistantStream(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodPost) {
+		return
+	}
+	if !s.assistant.Status().Available {
+		writeAPIError(w, http.StatusServiceUnavailable, "assistant_unavailable", s.assistant.Status().Reason)
+		return
+	}
+
+	var request assistantRequest
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+	if err := assistant.ValidateMessage(request.Message); err != nil {
+		writeAPIError(w, http.StatusUnprocessableEntity, "validation_error", err.Error())
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeAPIError(w, http.StatusInternalServerError, "streaming_unsupported", "response streaming is unavailable")
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+	err := s.assistant.Run(ctx, request.Message, func(event assistant.Event) error {
+		if err := writeSSE(w, event.Type, event); err != nil {
+			return err
+		}
+		flusher.Flush()
+		return nil
+	})
+	if err != nil && !errors.Is(err, context.Canceled) {
+		_ = writeSSE(w, "error", map[string]any{
+			"error": apiError{Code: "assistant_error", Message: "AI 策略助手暂时无法完成请求"},
+		})
+		flusher.Flush()
+	}
 }
 
 func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -297,6 +379,17 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func writeSSE(w io.Writer, event string, payload any) error {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("encode server-sent event: %w", err)
+	}
+	if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, data); err != nil {
+		return fmt.Errorf("write server-sent event: %w", err)
+	}
+	return nil
 }
 
 func securityHeaders(next http.Handler) http.Handler {

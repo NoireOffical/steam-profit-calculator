@@ -44,6 +44,52 @@
           </div>
         </section>
 
+        <section class="assistant-lab" aria-labelledby="assistant-title">
+          <aside class="assistant-intro">
+            <div>
+              <p class="eyebrow">AI STRATEGY ASSISTANT · MVP</p>
+              <h2 id="assistant-title">用自然语言提问，<br><span>用工具结果作答。</span></h2>
+              <p>助手负责理解目标和解释结果，市场查询与所有金额仍由下方同一套可信引擎完成。</p>
+            </div>
+            <div id="assistant-status" class="assistant-status" aria-live="polite">
+              <span class="assistant-status-dot" aria-hidden="true"></span>
+              <span>正在检查模型状态</span>
+            </div>
+            <div class="prompt-examples" aria-label="示例问题">
+              <span>试试这样问</span>
+              <button type="button" data-assistant-prompt="0.48 买入 Capsule 共 5 件，分别在 0.70 和 0.80 卖出，哪个收益更好？">比较多个卖价</button>
+              <button type="button" data-assistant-prompt="Capsule 买入价 0.48，数量 2，净倍率 0.85，目标总收益 0.40，需要卖多少钱？">反推目标卖价</button>
+              <button type="button" data-assistant-prompt="查询 AK-47 Redline 的 Steam 市场摘要，返回 3 个候选。">查询市场快照</button>
+            </div>
+            <p class="assistant-privacy">对话仅在当前页面显示，不写入计算历史。工具结果仅供研究，不构成投资或交易建议。</p>
+          </aside>
+
+          <article class="assistant-console" aria-label="AI 策略助手对话">
+            <div class="assistant-console-header">
+              <div>
+                <span class="console-kicker">GROUNDED SESSION</span>
+                <strong>临时对话</strong>
+              </div>
+              <span class="verified-label">TOOL EVIDENCE ON</span>
+            </div>
+            <div id="assistant-messages" class="assistant-messages" aria-live="polite" aria-label="对话消息">
+              <div class="chat-message assistant-message">
+                <span class="message-role">策略助手</span>
+                <div class="message-copy">告诉我商品、买入条件和目标。我会选择查询、收益计算或目标反推工具，并把可核对的依据一起给你。</div>
+              </div>
+            </div>
+            <div id="assistant-evidence" class="assistant-evidence" aria-live="polite" aria-label="可信工具依据"></div>
+            <form id="assistant-form" class="assistant-form">
+              <label for="assistant-input" class="sr-only">向 AI 策略助手提问</label>
+              <textarea id="assistant-input" name="message" rows="3" maxlength="4000" placeholder="例如：0.48 买入 5 件，0.80 卖出时总收益是多少？" required></textarea>
+              <div class="assistant-form-footer">
+                <span id="assistant-form-hint">关键数值必须通过工具验证</span>
+                <button id="assistant-submit" class="primary-button accent-button" type="submit">发送问题</button>
+              </div>
+            </form>
+          </article>
+        </section>
+
         <section class="workspace" aria-label="收益分析工作区">
           <article class="panel search-panel">
             <div class="panel-heading">
@@ -131,13 +177,6 @@
           </article>
         </section>
 
-        <section class="next-milestone" aria-labelledby="next-title">
-          <div>
-            <p class="eyebrow">NEXT MILESTONE</p>
-            <h2 id="next-title">AI 策略助手将调用这套可信工具</h2>
-          </div>
-          <p>下一阶段会加入自然语言目标解析、工具调用和结果解释。模型不会自行计算价格，而是引用这里已经验证并保存的结果。</p>
-        </section>
       </main>
 
       <footer>

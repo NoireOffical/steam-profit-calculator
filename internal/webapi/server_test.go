@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"steam-profit-calculator/internal/assistant"
 	"steam-profit-calculator/internal/domain"
 	"steam-profit-calculator/internal/lookup"
 	"steam-profit-calculator/internal/webapi"
@@ -29,6 +30,32 @@ type memoryRecordStore struct {
 	records   []domain.ProfitRecord
 	appendErr error
 	listErr   error
+}
+
+type stubAssistantModel struct {
+	turns int
+	err   error
+}
+
+func (s *stubAssistantModel) Status() assistant.Status {
+	return assistant.Status{Available: true, Provider: "fake", Model: "fake-1", PromptVersion: assistant.PromptVersion}
+}
+
+func (s *stubAssistantModel) Respond(_ context.Context, _ assistant.ModelRequest) (assistant.ModelResponse, error) {
+	s.turns++
+	if s.err != nil {
+		return assistant.ModelResponse{}, s.err
+	}
+	if s.turns == 1 {
+		return assistant.ModelResponse{
+			State: "turn-1",
+			ToolCalls: []assistant.ToolCall{{
+				CallID: "call-1", Name: "calculate_profit",
+				Arguments: `{"item_name":"Capsule","buy_price":0.48,"quantity":1,"multiplier":0.837,"sell_prices":[0.8]}`,
+			}},
+		}, nil
+	}
+	return assistant.ModelResponse{Text: "计算结果已由工具验证 [T1]。仅供研究，不构成投资或交易建议。", RequestID: "fake-request"}, nil
 }
 
 func (s *memoryRecordStore) Append(records []domain.ProfitRecord) error {
@@ -64,6 +91,75 @@ func TestHealthEndpointAndSecurityHeaders(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Body.String(), `"status":"ok"`) {
 		t.Fatalf("body = %q, want healthy response", recorder.Body.String())
+	}
+}
+
+func TestAssistantStatusDefaultsToUnavailableWithoutBreakingHealth(t *testing.T) {
+	handler := newTestHandler(t, &stubLookupClient{}, &memoryRecordStore{})
+	status := performRequest(handler, http.MethodGet, "/api/v1/assistant/status", "", "")
+	if status.Code != http.StatusOK || !strings.Contains(status.Body.String(), `"available":false`) {
+		t.Fatalf("status response = %d %s", status.Code, status.Body.String())
+	}
+	health := performRequest(handler, http.MethodGet, "/api/health", "", "")
+	if health.Code != http.StatusOK {
+		t.Fatalf("health status = %d", health.Code)
+	}
+}
+
+func TestAssistantUnavailableRejectsStreamBeforeStartingSSE(t *testing.T) {
+	handler := newTestHandler(t, &stubLookupClient{}, &memoryRecordStore{})
+	recorder := performRequest(handler, http.MethodPost, "/api/v1/assistant/stream", `{"message":"calculate"}`, "application/json")
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusServiceUnavailable)
+	}
+	if !strings.Contains(recorder.Body.String(), `"code":"assistant_unavailable"`) {
+		t.Fatalf("body = %q", recorder.Body.String())
+	}
+}
+
+func TestAssistantStreamEmitsEvidenceWithoutPersistingRecords(t *testing.T) {
+	store := &memoryRecordStore{}
+	model := &stubAssistantModel{}
+	handler := newAssistantTestHandler(t, &stubLookupClient{}, store, model)
+	recorder := performRequest(handler, http.MethodPost, "/api/v1/assistant/stream", `{"message":"calculate Capsule"}`, "application/json")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if got := recorder.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/event-stream") {
+		t.Fatalf("Content-Type = %q", got)
+	}
+	body := recorder.Body.String()
+	for _, event := range []string{"event: status", "event: tool_start", "event: evidence", "event: delta", "event: done"} {
+		if !strings.Contains(body, event) {
+			t.Fatalf("body missing %q: %s", event, body)
+		}
+	}
+	if !strings.Contains(body, `"grounded":true`) || !strings.Contains(body, `"total_profit":0.19`) {
+		t.Fatalf("body = %s", body)
+	}
+	if len(store.records) != 0 {
+		t.Fatalf("persisted records = %d, want 0", len(store.records))
+	}
+}
+
+func TestAssistantStreamRejectsInvalidJSONWithoutCallingModel(t *testing.T) {
+	model := &stubAssistantModel{}
+	handler := newAssistantTestHandler(t, &stubLookupClient{}, &memoryRecordStore{}, model)
+	recorder := performRequest(handler, http.MethodPost, "/api/v1/assistant/stream", `{"message":"hello","unknown":true}`, "application/json")
+	if recorder.Code != http.StatusBadRequest || model.turns != 0 {
+		t.Fatalf("status = %d, model turns = %d, body = %s", recorder.Code, model.turns, recorder.Body.String())
+	}
+}
+
+func TestAssistantProviderFailureBecomesSafeStreamError(t *testing.T) {
+	model := &stubAssistantModel{err: errors.New("secret provider detail")}
+	handler := newAssistantTestHandler(t, &stubLookupClient{}, &memoryRecordStore{}, model)
+	recorder := performRequest(handler, http.MethodPost, "/api/v1/assistant/stream", `{"message":"hello"}`, "application/json")
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "event: error") {
+		t.Fatalf("status/body = %d %s", recorder.Code, recorder.Body.String())
+	}
+	if strings.Contains(recorder.Body.String(), "secret provider detail") {
+		t.Fatalf("provider detail leaked: %s", recorder.Body.String())
 	}
 }
 
@@ -277,6 +373,23 @@ func newTestHandler(t *testing.T, lookupClient lookup.Client, store webapi.Recor
 	handler, err := webapi.NewHandler(lookupClient, store)
 	if err != nil {
 		t.Fatalf("NewHandler() error = %v", err)
+	}
+	return handler
+}
+
+func newAssistantTestHandler(t *testing.T, lookupClient lookup.Client, store webapi.RecordStore, model assistant.Model) http.Handler {
+	t.Helper()
+	runner, err := assistant.NewToolRunner(lookupClient)
+	if err != nil {
+		t.Fatalf("NewToolRunner() error = %v", err)
+	}
+	service, err := assistant.NewService(model, runner)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	handler, err := webapi.NewHandlerWithAssistant(lookupClient, store, service)
+	if err != nil {
+		t.Fatalf("NewHandlerWithAssistant() error = %v", err)
 	}
 	return handler
 }
