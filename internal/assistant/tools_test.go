@@ -3,6 +3,7 @@ package assistant
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -48,6 +49,7 @@ func TestToolRunnerNormalizesLookupFailures(t *testing.T) {
 		code string
 	}{
 		{name: "no matches", err: lookup.ErrNoMatches, code: "no_matches"},
+		{name: "official rate limit", err: fmt.Errorf("retry exhausted: %w", lookup.ErrSteamOfficialRateLimit), code: "official_provider_rate_limited"},
 		{name: "provider", err: errors.New("secret upstream detail"), code: "provider_error"},
 	}
 	for _, test := range tests {

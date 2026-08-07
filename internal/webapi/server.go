@@ -330,7 +330,11 @@ func (s *server) handleItems(w http.ResponseWriter, r *http.Request) {
 			writeAPIError(w, http.StatusNotFound, "no_matches", err.Error())
 			return
 		}
-		writeAPIError(w, http.StatusBadGateway, "provider_error", "item provider is temporarily unavailable")
+		if errors.Is(err, lookup.ErrSteamOfficialRateLimit) {
+			writeAPIError(w, http.StatusBadGateway, "official_provider_rate_limited", "Steam official market API is rate limited; configure a supported third-party Steam Market Provider")
+			return
+		}
+		writeAPIError(w, http.StatusBadGateway, "provider_error", "market data provider did not complete the lookup")
 		return
 	}
 

@@ -9,12 +9,13 @@ import (
 )
 
 const (
-	defaultProvider     = ProviderSteamPublic
-	defaultBaseURL      = "https://steamcommunity.com"
-	defaultAppID        = 730
-	defaultTimeout      = 5 * time.Second
-	defaultAPIKeyHeader = "X-API-Key"
-	defaultUserAgent    = "steam-profit-calculator/lookup"
+	defaultProvider           = ProviderSteamPublic
+	defaultSteamPublicBaseURL = "https://steamcommunity.com"
+	defaultSteamAPIsBaseURL   = "https://marketplaceapi.steamapis.com"
+	defaultAppID              = 730
+	defaultTimeout            = 5 * time.Second
+	defaultAPIKeyHeader       = "X-API-Key"
+	defaultUserAgent          = "steam-profit-calculator/lookup"
 
 	envLookupProvider     = "STEAM_PROFIT_LOOKUP_PROVIDER"
 	envLookupBaseURL      = "STEAM_PROFIT_LOOKUP_BASE_URL"
@@ -40,7 +41,6 @@ type Config struct {
 func LoadConfigFromEnvironment() (Config, error) {
 	cfg := Config{
 		Provider:     defaultProvider,
-		BaseURL:      defaultBaseURL,
 		AppID:        defaultAppID,
 		Timeout:      defaultTimeout,
 		APIKey:       strings.TrimSpace(os.Getenv(envLookupAPIKey)),
@@ -53,6 +53,8 @@ func LoadConfigFromEnvironment() (Config, error) {
 	}
 	if baseURL := strings.TrimSpace(os.Getenv(envLookupBaseURL)); baseURL != "" {
 		cfg.BaseURL = baseURL
+	} else {
+		cfg.BaseURL = defaultLookupBaseURL(cfg.Provider)
 	}
 	if rawAppID := strings.TrimSpace(os.Getenv(envLookupAppID)); rawAppID != "" {
 		appID, err := strconv.Atoi(rawAppID)
@@ -82,4 +84,11 @@ func LoadConfigFromEnvironment() (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func defaultLookupBaseURL(provider string) string {
+	if provider == ProviderSteamAPIs {
+		return defaultSteamAPIsBaseURL
+	}
+	return defaultSteamPublicBaseURL
 }

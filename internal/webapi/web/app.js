@@ -75,7 +75,9 @@ async function requestJSON(path, options = {}) {
     throw new Error("服务返回了无法识别的响应");
   }
   if (!response.ok) {
-    throw new Error(payload?.error?.message || `请求失败（${response.status}）`);
+    const requestError = new Error(payload?.error?.message || `请求失败（${response.status}）`);
+    requestError.code = payload?.error?.code || "request_error";
+    throw requestError;
   }
   return payload.data;
 }
@@ -279,7 +281,7 @@ function setAssistantAvailability(status) {
   elements.assistantSubmit.disabled = true;
   elements.assistantStop.hidden = true;
   elements.assistantRetry.hidden = true;
-  elements.assistantFormHint.textContent = "现有查询和确定性计算仍可正常使用";
+  elements.assistantFormHint.textContent = "AI 为可选增强：接入 Provider / API Key 后即可启用，查询、计算和历史不受影响";
 }
 
 async function checkAssistantStatus() {
@@ -555,7 +557,7 @@ elements.lookupForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const button = elements.lookupForm.querySelector("button[type='submit']");
   setButtonBusy(button, true, "查询中");
-  setMessage(elements.lookupMessage, "正在查询 Steam 市场摘要…");
+  setMessage(elements.lookupMessage, "正在查询市场数据 Provider…");
   try {
     const query = encodeURIComponent(elements.lookupQuery.value.trim());
     const limit = encodeURIComponent(elements.lookupLimit.value);
@@ -563,8 +565,18 @@ elements.lookupForm.addEventListener("submit", async (event) => {
     renderLookupTable(data.items);
     setMessage(elements.lookupMessage, `找到 ${data.items.length} 个候选商品`, "success");
   } catch (error) {
-    elements.lookupResults.replaceChildren(emptyState("查询没有返回可用结果"));
-    setMessage(elements.lookupMessage, error.message, "error");
+    const officialRateLimited = error.code === "official_provider_rate_limited";
+    const providerFailed = officialRateLimited || error.code === "provider_error";
+    elements.lookupResults.replaceChildren(emptyState(providerFailed
+      ? officialRateLimited
+        ? "Steam 官方市场 API 当前处于限流状态；可接入第三方 Steam Market Provider 继续查询"
+        : "当前市场数据 Provider 未返回结果；收益计算、目标反推和历史记录仍可继续使用"
+      : "查询没有返回可用结果"));
+    setMessage(elements.lookupMessage, officialRateLimited
+      ? "Steam 官方市场 API 当前处于限流状态；建议接入可用的第三方 Steam Market Provider（如 SteamApis），以有效查询虚拟交易物品信息"
+      : providerFailed
+        ? "当前市场数据 Provider 未完成查询；请检查 Provider 或 API Key，网站核心功能不受影响"
+      : error.message, "error");
   } finally {
     setButtonBusy(button, false, "");
   }

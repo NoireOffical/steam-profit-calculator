@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -667,12 +668,14 @@ func TestItemsEndpointUsesNormalizedLookupService(t *testing.T) {
 
 func TestItemsEndpointDistinguishesNoMatchesAndProviderFailure(t *testing.T) {
 	tests := []struct {
-		name       string
-		client     *stubLookupClient
-		wantStatus int
-		wantCode   string
+		name        string
+		client      *stubLookupClient
+		wantStatus  int
+		wantCode    string
+		wantMessage string
 	}{
 		{name: "no matches", client: &stubLookupClient{}, wantStatus: http.StatusNotFound, wantCode: "no_matches"},
+		{name: "official rate limit", client: &stubLookupClient{err: fmt.Errorf("retry exhausted: %w", lookup.ErrSteamOfficialRateLimit)}, wantStatus: http.StatusBadGateway, wantCode: "official_provider_rate_limited", wantMessage: "third-party Steam Market Provider"},
 		{name: "provider failure", client: &stubLookupClient{err: errors.New("upstream down")}, wantStatus: http.StatusBadGateway, wantCode: "provider_error"},
 	}
 
@@ -686,7 +689,23 @@ func TestItemsEndpointDistinguishesNoMatchesAndProviderFailure(t *testing.T) {
 			if !strings.Contains(recorder.Body.String(), `"code":"`+test.wantCode+`"`) {
 				t.Fatalf("body = %q, want code %q", recorder.Body.String(), test.wantCode)
 			}
+			if test.wantMessage != "" && !strings.Contains(recorder.Body.String(), test.wantMessage) {
+				t.Fatalf("body = %q, want message %q", recorder.Body.String(), test.wantMessage)
+			}
 		})
+	}
+}
+
+func TestItemsProviderFailureDoesNotAppendRecords(t *testing.T) {
+	store := &memoryRecordStore{}
+	handler := newTestHandler(t, &stubLookupClient{err: errors.New("upstream down")}, store)
+
+	recorder := performRequest(handler, http.MethodGet, "/api/v1/items?query=AK-47", "", "")
+	if recorder.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadGateway)
+	}
+	if len(store.records) != 0 || store.queries != 0 {
+		t.Fatalf("records/queries = %d/%d, want 0/0", len(store.records), store.queries)
 	}
 }
 

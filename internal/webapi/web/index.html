@@ -49,7 +49,7 @@
             <div>
               <p class="eyebrow">AI STRATEGY ASSISTANT · QUALITY LAB</p>
               <h2 id="assistant-title">用自然语言提问，<br><span>用工具结果作答。</span></h2>
-              <p>助手负责理解目标和解释结果，市场查询与所有金额仍由下方同一套可信引擎完成。</p>
+              <p>OpenAI 是接入即用的可选增强：未配置时工作台照常运行；启用后，助手负责理解目标，市场查询与所有金额仍由同一套可信工具完成。</p>
             </div>
             <div id="assistant-status" class="assistant-status" aria-live="polite">
               <span class="assistant-status-dot" aria-hidden="true"></span>
@@ -59,7 +59,7 @@
               <span>试试这样问</span>
               <button type="button" data-assistant-prompt="0.48 买入 Capsule 共 5 件，分别在 0.70 和 0.80 卖出，哪个收益更好？">比较多个卖价</button>
               <button type="button" data-assistant-prompt="Capsule 买入价 0.48，数量 2，净倍率 0.85，目标总收益 0.40，需要卖多少钱？">反推目标卖价</button>
-              <button type="button" data-assistant-prompt="查询 AK-47 Redline 的 Steam 市场摘要，返回 3 个候选。">查询市场快照</button>
+              <button type="button" data-assistant-prompt="通过已配置的市场数据源查询 AK-47 Redline，返回 3 个候选。">查询市场快照</button>
             </div>
             <p class="assistant-privacy">最近 6 条对话仅在当前页面显示，不写入数据库或日志。历史内容不是数值依据，后续计算仍会重新调用可信工具。</p>
           </aside>
@@ -101,7 +101,7 @@
                 <span class="step-number">01</span>
                 <h2>定位市场商品</h2>
               </div>
-              <p>从 Steam 公开市场确认规范名称和挂牌概况。</p>
+              <p>市场查询使用可替换 Provider；`steam_public` 与 SteamApis 共用同一入口，切换 Provider 或 Key 不影响计算和历史。第三方报价会标明来源市场。</p>
             </div>
             <form id="lookup-form" class="inline-form">
               <label class="field field-grow">

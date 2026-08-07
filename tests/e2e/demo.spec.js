@@ -130,7 +130,18 @@ test.describe("deployable demo", () => {
     await expect(page.locator("#assistant-input")).toBeDisabled();
     await expect(page.locator("#assistant-submit")).toBeDisabled();
     await expect(page.locator("#calculation-form button[type='submit']")).toBeEnabled();
-    await expect(page.locator("#assistant-form-hint")).toHaveText("现有查询和确定性计算仍可正常使用");
+    await expect(page.locator("#assistant-form-hint")).toHaveText("AI 为可选增强：接入 Provider / API Key 后即可启用，查询、计算和历史不受影响");
+
+    await page.route("**/api/v1/items?**", (route) => route.fulfill({
+      status: 502,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "official_provider_rate_limited", message: "Steam official market API is rate limited" } }),
+    }));
+    await page.locator("#lookup-query").fill("AK-47 Redline");
+    await page.getByRole("button", { name: "查询市场", exact: true }).click();
+    await expect(page.locator("#lookup-message")).toHaveText("Steam 官方市场 API 当前处于限流状态；建议接入可用的第三方 Steam Market Provider（如 SteamApis），以有效查询虚拟交易物品信息");
+    await expect(page.locator("#lookup-results")).toContainText("可接入第三方 Steam Market Provider 继续查询");
+    await expect(page.locator("#calculation-form button[type='submit']")).toBeEnabled();
   });
 
   test("keeps bounded page-local context and explicitly retries a failed turn", async ({ page }) => {
