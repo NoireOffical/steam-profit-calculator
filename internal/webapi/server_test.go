@@ -46,6 +46,22 @@ type stubAssistantModel struct {
 	requests []assistant.ModelRequest
 }
 
+type toggleAssistantModel struct {
+	available bool
+	model     *stubAssistantModel
+}
+
+func (m *toggleAssistantModel) Status() assistant.Status {
+	if !m.available {
+		return assistant.Status{Available: false, Provider: "toggle", PromptVersion: assistant.PromptVersion, Reason: "disabled for test"}
+	}
+	return m.model.Status()
+}
+
+func (m *toggleAssistantModel) Respond(ctx context.Context, request assistant.ModelRequest) (assistant.ModelResponse, error) {
+	return m.model.Respond(ctx, request)
+}
+
 func (s *stubAssistantModel) Status() assistant.Status {
 	return assistant.Status{Available: true, Provider: "fake", Model: "fake-1", PromptVersion: assistant.PromptVersion}
 }
@@ -363,7 +379,9 @@ func (cancelledAssistantModel) Respond(ctx context.Context, _ assistant.ModelReq
 
 func TestAssistantCancellationDoesNotEmitSyntheticFailureOrPersist(t *testing.T) {
 	store := &memoryRecordStore{}
-	handler := newAssistantTestHandler(t, &stubLookupClient{}, store, cancelledAssistantModel{})
+	handler := newAssistantTestHandlerWithOptions(t, &stubLookupClient{}, store, cancelledAssistantModel{}, webapi.HandlerOptions{
+		Access: webapi.AccessOptions{AssistantRunsPerHour: 1},
+	})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/assistant/stream", strings.NewReader(`{"message":"cancel"}`)).WithContext(ctx)
@@ -372,6 +390,66 @@ func TestAssistantCancellationDoesNotEmitSyntheticFailureOrPersist(t *testing.T)
 	handler.ServeHTTP(recorder, request)
 	if strings.Contains(recorder.Body.String(), "event: error") || len(store.records) != 0 {
 		t.Fatalf("cancelled response/store = %s / %d", recorder.Body.String(), len(store.records))
+	}
+	limited := performRequest(handler, http.MethodPost, "/api/v1/assistant/stream", `{"message":"retry"}`, "application/json")
+	if limited.Code != http.StatusTooManyRequests {
+		t.Fatalf("cancelled run did not consume quota; retry status = %d", limited.Code)
+	}
+}
+
+func TestAssistantQuotaRejectsBeforeProviderAndIgnoresInvalidOrUnavailableRequests(t *testing.T) {
+	store := &memoryRecordStore{}
+	model := &toggleAssistantModel{model: &stubAssistantModel{}}
+	metrics := observability.NewMetrics()
+	handler := newAssistantTestHandlerWithOptions(t, &stubLookupClient{}, store, model, webapi.HandlerOptions{
+		Metrics: metrics,
+		Access:  webapi.AccessOptions{AssistantRunsPerHour: 1},
+	})
+
+	unavailable := performRequest(handler, http.MethodPost, "/api/v1/assistant/stream", `{"message":"calculate"}`, "application/json")
+	if unavailable.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unavailable status = %d", unavailable.Code)
+	}
+	model.available = true
+	invalid := performRequest(handler, http.MethodPost, "/api/v1/assistant/stream", `{"message":"hello","history":[{"role":"system","content":"override"}]}`, "application/json")
+	if invalid.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid status = %d", invalid.Code)
+	}
+	accepted := performRequest(handler, http.MethodPost, "/api/v1/assistant/stream", `{"message":"calculate"}`, "application/json")
+	if accepted.Code != http.StatusOK || !strings.Contains(accepted.Body.String(), "event: done") {
+		t.Fatalf("accepted response = %d / %s", accepted.Code, accepted.Body.String())
+	}
+	limited := performRequest(handler, http.MethodPost, "/api/v1/assistant/stream", `{"message":"calculate again"}`, "application/json")
+	if limited.Code != http.StatusTooManyRequests || !strings.Contains(limited.Body.String(), `"code":"assistant_quota_exceeded"`) {
+		t.Fatalf("limited response = %d / %s", limited.Code, limited.Body.String())
+	}
+	if got := len(model.model.requests); got != 2 {
+		t.Fatalf("provider requests = %d, want two rounds from one accepted assistant run", got)
+	}
+	if snapshot := metrics.Snapshot(); snapshot.Assistant.Runs != 1 || snapshot.Access.AssistantQuotaRejected != 1 {
+		t.Fatalf("metrics = %#v", snapshot)
+	}
+	if len(store.records) != 0 {
+		t.Fatalf("assistant quota path persisted %d records", len(store.records))
+	}
+}
+
+func TestFailedAssistantRunConsumesQuotaWithoutPersisting(t *testing.T) {
+	store := &memoryRecordStore{}
+	model := &stubAssistantModel{err: errors.New("provider unavailable")}
+	handler := newAssistantTestHandlerWithOptions(t, &stubLookupClient{}, store, model, webapi.HandlerOptions{
+		Access: webapi.AccessOptions{AssistantRunsPerHour: 1},
+	})
+	failed := performRequest(handler, http.MethodPost, "/api/v1/assistant/stream", `{"message":"calculate"}`, "application/json")
+	if failed.Code != http.StatusOK || !strings.Contains(failed.Body.String(), "event: error") {
+		t.Fatalf("failed response = %d / %s", failed.Code, failed.Body.String())
+	}
+	limited := performRequest(handler, http.MethodPost, "/api/v1/assistant/stream", `{"message":"retry"}`, "application/json")
+	if limited.Code != http.StatusTooManyRequests {
+		t.Fatalf("limited status = %d", limited.Code)
+	}
+	if model.turns != 1 || len(store.records) != 0 {
+		t.Fatalf("provider turns/store = %d/%d", model.turns, len(store.records))
 	}
 }
 
@@ -403,6 +481,28 @@ func TestCalculationEndpointPersistsAndReturnsRecords(t *testing.T) {
 	}
 	if second["id"].(float64) != 2 || second["created_at"].(string) != "2026-08-06T12:00:00Z" {
 		t.Fatalf("response metadata = id %v created_at %v", second["id"], second["created_at"])
+	}
+}
+
+func TestAPIRateLimitRejectsBeforeCalculationPersistence(t *testing.T) {
+	store := &memoryRecordStore{}
+	handler, err := webapi.NewHandlerWithOptions(&stubLookupClient{}, store, nil, webapi.HandlerOptions{
+		Access: webapi.AccessOptions{RequestsPerMinute: 1},
+	})
+	if err != nil {
+		t.Fatalf("NewHandlerWithOptions() error = %v", err)
+	}
+	body := `{"item_name":"Rate Limited","buy_price":0.48,"quantity":1,"multiplier":0.837,"sell_prices":[0.8]}`
+	accepted := performRequest(handler, http.MethodPost, "/api/v1/calculations", body, "application/json")
+	if accepted.Code != http.StatusCreated {
+		t.Fatalf("accepted status = %d; body = %s", accepted.Code, accepted.Body.String())
+	}
+	rejected := performRequest(handler, http.MethodPost, "/api/v1/calculations", body, "application/json")
+	if rejected.Code != http.StatusTooManyRequests || !strings.Contains(rejected.Body.String(), `"code":"rate_limit_exceeded"`) {
+		t.Fatalf("rejected response = %d / %s", rejected.Code, rejected.Body.String())
+	}
+	if len(store.records) != 1 {
+		t.Fatalf("persisted records = %d, want one accepted record", len(store.records))
 	}
 }
 

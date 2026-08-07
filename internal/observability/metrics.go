@@ -16,6 +16,7 @@ type Snapshot struct {
 	UptimeSec int64             `json:"uptime_seconds"`
 	Requests  RequestSnapshot   `json:"requests"`
 	Assistant AssistantSnapshot `json:"assistant"`
+	Access    AccessSnapshot    `json:"access"`
 }
 
 // RequestSnapshot contains aggregate HTTP request counters.
@@ -38,6 +39,13 @@ type AssistantSnapshot struct {
 	OutputTokens    uint64  `json:"output_tokens"`
 	TotalTokens     uint64  `json:"total_tokens"`
 	DurationTotalMS float64 `json:"duration_total_ms"`
+}
+
+// AccessSnapshot contains aggregate hosted-demo rejection counters.
+type AccessSnapshot struct {
+	Unauthorized           uint64 `json:"unauthorized"`
+	RateLimited            uint64 `json:"rate_limited"`
+	AssistantQuotaRejected uint64 `json:"assistant_quota_rejected"`
 }
 
 // AssistantCompletion is the content-free completion metadata recorded by Metrics.
@@ -69,6 +77,10 @@ type Metrics struct {
 	assistantOutputTokens atomic.Uint64
 	assistantTotalTokens  atomic.Uint64
 	assistantElapsedMS    atomic.Uint64
+
+	accessUnauthorized           atomic.Uint64
+	accessRateLimited            atomic.Uint64
+	accessAssistantQuotaRejected atomic.Uint64
 }
 
 // NewMetrics creates an empty process-local metrics registry.
@@ -110,6 +122,11 @@ func (m *Metrics) Snapshot() Snapshot {
 			TotalTokens:     m.assistantTotalTokens.Load(),
 			DurationTotalMS: float64(m.assistantElapsedMS.Load()),
 		},
+		Access: AccessSnapshot{
+			Unauthorized:           m.accessUnauthorized.Load(),
+			RateLimited:            m.accessRateLimited.Load(),
+			AssistantQuotaRejected: m.accessAssistantQuotaRejected.Load(),
+		},
 	}
 }
 
@@ -124,6 +141,27 @@ func (m *Metrics) AssistantStarted() {
 func (m *Metrics) AssistantFailed() {
 	if m != nil {
 		m.assistantFailures.Add(1)
+	}
+}
+
+// AccessUnauthorized records one rejected hosted-demo credential check.
+func (m *Metrics) AccessUnauthorized() {
+	if m != nil {
+		m.accessUnauthorized.Add(1)
+	}
+}
+
+// AccessRateLimited records one process-local API limit rejection.
+func (m *Metrics) AccessRateLimited() {
+	if m != nil {
+		m.accessRateLimited.Add(1)
+	}
+}
+
+// AccessAssistantQuotaRejected records one assistant budget rejection.
+func (m *Metrics) AccessAssistantQuotaRejected() {
+	if m != nil {
+		m.accessAssistantQuotaRejected.Add(1)
 	}
 }
 

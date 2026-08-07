@@ -21,8 +21,9 @@ Steam Profit Calculator 是一个使用 Go 编写的 Steam Community Market 收�
 - Web 默认使用版本化 SQLite，记录具有稳定 ID 和 UTC 创建时间；
 - 历史记录支持服务端商品/收益筛选、稳定排序和有界分页；
 - 支持显式、幂等的 CSV 到 SQLite 导入，并保留 CSV 回滚模式；
-- 提供六条隔离的 Playwright Chromium 流程，覆盖持久化、分页、输入错误、AI 关闭降级、临时上下文/重试和取消；
+- 提供七条隔离的 Playwright Chromium 流程，覆盖持久化、分页、输入错误、AI 关闭降级、临时上下文/重试、取消和演示访问控制；
 - 提供非 root Docker Compose 演示、固定种子数据、SQLite 命名卷和健康检查；
+- 提供可选共享演示凭据、每客户端 API 限流、全局模型调用配额和只读线上合成检查；
 - 每个请求具有关联 ID，并提供不记录用户内容的结构化日志与请求/助手聚合指标；
 - 保留 `lookup`、`add`、`reverse`、`import`、`list` 五个独立 CLI 命令；
 - 一次传入多个卖价，批量计算不同退出价格下的收益；
@@ -114,7 +115,7 @@ make demo-run
 docker compose up --build --wait
 ```
 
-完整演示顺序、浏览器测试、备份、恢复和回滚方法见[演示与运行手册](docs/DEMO_RUNBOOK.zh-CN.md)。
+完整演示顺序、浏览器测试、备份、恢复和回滚方法见[演示与运行手册](docs/DEMO_RUNBOOK.zh-CN.md)；Railway 的 HTTPS、Secret、限流、持久卷、线上检查和发布边界见[受控托管演示运行手册](docs/HOSTED_DEMO_RUNBOOK.zh-CN.md)。
 
 ## 浏览器工作台
 
@@ -162,14 +163,20 @@ Web 默认使用 SQLite。可以显式导入历史兼容 CSV，同一文件重�
 
 | 环境变量 | 默认值 | 用途 |
 | --- | --- | --- |
+| `PORT` | 空 | 托管平台端口；未设置显式服务地址时监听 `0.0.0.0:$PORT` |
 | `STEAM_PROFIT_STORAGE` | `sqlite` | Web 仓储：`sqlite` 或 `csv` |
 | `STEAM_PROFIT_DATABASE_FILE` | `steam-profit.db` | SQLite 数据库路径 |
 | `STEAM_PROFIT_RECORD_FILE` | `steam-profit-records.csv` | CSV 模式使用的记录路径 |
 | `STEAM_PROFIT_IMPORT_CSV` | 空 | SQLite 启动前显式导入的兼容 CSV |
+| `STEAM_PROFIT_DEMO_USERNAME` | 空 | 可选共享演示用户名；必须与密码同时配置 |
+| `STEAM_PROFIT_DEMO_PASSWORD` | 空 | 可选共享演示密码；至少 12 个字符 |
+| `STEAM_PROFIT_RATE_LIMIT_PER_MINUTE` | `0` | 每客户端每分钟 API 上限；`0` 表示关闭 |
+| `STEAM_PROFIT_AI_RUNS_PER_HOUR` | `0` | 整个进程每小时实际模型调用上限；`0` 表示关闭 |
+| `STEAM_PROFIT_TRUST_PROXY_HEADERS` | `false` | 仅在受信代理提供 `X-Real-IP` 或 `X-Forwarded-For` 时启用 |
 
 每个 HTTP 响应都包含 `X-Request-ID`。请求日志只记录方法、路径、状态、耗时和关联 ID；聚合指标不记录查询字符串、请求体、Prompt、模型回答、市场数据、密钥或历史记录值。
 
-当前 Web 版本仍面向本地单用户实践。浏览器最多发送 6 条页面内历史，但对话、Provider 响应和工具依据都不落盘；公开部署前仍需完成身份认证、限流、定时真实模型评测、托管备份、持久化监控和公网 TLS。
+当前 Web 版本仍面向本地单用户或少量评审的受控演示。配置共享 Basic 凭据后，除健康检查外的页面与 API 都会受保护；API 限流和模型调用配额也可独立启用。仓库已包含 Railway 部署清单，但它仍不是完整用户系统：没有注册、租户隔离、跨实例限流、持久化监控或已验收的托管备份。浏览器最多发送 6 条页面内历史，但对话、Provider 响应和工具依据都不落盘。
 
 ## AI 策略助手
 
@@ -214,6 +221,8 @@ make ai-eval-baseline
 ```
 
 当前 Prompt 报告写入 `.build/evaluations/report.json`，保留的基线 Prompt 写入 `.build/evaluations/baseline-report.json`。报告包含用例 ID、Prompt/模型版本、实际工具、溯源结果、延迟、Token、阈值失败和可选成本估算，不包含密钥、Prompt 文本、模型原文或工具值。只有调用者显式传入 `--input-usd-per-million` 与 `--output-usd-per-million` 等费率时才估算成本，仓库不内置易过期的价格表。
+
+GitHub 的 `Live AI Evaluation` 工作流只能手动触发，使用仓库 Secret 执行有界的当前/基线对比并保留脱敏报告；普通 CI 不调用真实模型。配置线上地址后，`Hosted Demo Smoke` 每 6 小时执行一次不写数据、不调用模型的只读检查。配置方法见[受控托管演示运行手册](docs/HOSTED_DEMO_RUNBOOK.zh-CN.md)。
 
 ## 命令总览
 

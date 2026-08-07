@@ -1,0 +1,103 @@
+name: Live AI Evaluation
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_cases:
+        description: Stable semantic-suite prefix per prompt; use 0 for all 12 cases
+        required: true
+        default: "3"
+        type: string
+      input_usd_per_million:
+        description: Caller-supplied input-token rate
+        required: true
+        default: "0"
+        type: string
+      output_usd_per_million:
+        description: Caller-supplied output-token rate
+        required: true
+        default: "0"
+        type: string
+      max_cost_usd:
+        description: Maximum estimated cost across each prompt run; 0 disables
+        required: true
+        default: "0"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-ai-evaluation
+  cancel-in-progress: false
+
+jobs:
+  compare-prompts:
+    name: Current and baseline prompt
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      STEAM_PROFIT_AI_PROVIDER: openai
+      STEAM_PROFIT_AI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      STEAM_PROFIT_AI_MODEL: ${{ vars.OPENAI_MODEL }}
+      EVAL_MAX_CASES: ${{ inputs.max_cases }}
+      EVAL_INPUT_USD_PER_MILLION: ${{ inputs.input_usd_per_million }}
+      EVAL_OUTPUT_USD_PER_MILLION: ${{ inputs.output_usd_per_million }}
+      EVAL_MAX_COST_USD: ${{ inputs.max_cost_usd }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: 1.21.x
+          cache: false
+
+      - name: Require an injected model credential
+        run: |
+          if [[ -z "${STEAM_PROFIT_AI_API_KEY}" ]]; then
+            echo "::error::Repository secret OPENAI_API_KEY is required for explicit live evaluation"
+            exit 1
+          fi
+
+      - name: Verify report engine before paid calls
+        run: go test ./internal/assistant ./internal/evaluation
+
+      - name: Evaluate current and baseline prompts
+        run: |
+          set +e
+          go run ./cmd/steam-profit-eval \
+            --live \
+            --prompt-version current \
+            --max-cases "${EVAL_MAX_CASES}" \
+            --input-usd-per-million "${EVAL_INPUT_USD_PER_MILLION}" \
+            --output-usd-per-million "${EVAL_OUTPUT_USD_PER_MILLION}" \
+            --max-cost-usd "${EVAL_MAX_COST_USD}" \
+            --output .build/evaluations/current-report.json
+          current_status=$?
+          go run ./cmd/steam-profit-eval \
+            --live \
+            --prompt-version baseline \
+            --max-cases "${EVAL_MAX_CASES}" \
+            --input-usd-per-million "${EVAL_INPUT_USD_PER_MILLION}" \
+            --output-usd-per-million "${EVAL_OUTPUT_USD_PER_MILLION}" \
+            --max-cost-usd "${EVAL_MAX_COST_USD}" \
+            --output .build/evaluations/baseline-report.json
+          baseline_status=$?
+          set -e
+          if (( current_status != 0 || baseline_status != 0 )); then
+            echo "One or both prompt evaluations failed; inspect the uploaded JSON reports"
+            exit 1
+          fi
+
+      - name: Upload content-free reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: live-ai-evaluation-${{ github.run_id }}
+          path: .build/evaluations/*.json
+          if-no-files-found: ignore
+          retention-days: 14

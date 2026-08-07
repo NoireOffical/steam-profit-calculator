@@ -21,8 +21,9 @@ The project keeps its formulas, storage schema, provider behavior, and error han
 - Versioned SQLite web persistence with durable record IDs and UTC timestamps
 - Server-side item/outcome filters, stable ordering, and bounded history pagination
 - Explicit, idempotent CSV-to-SQLite import plus a legacy CSV rollback mode
-- Six isolated Playwright Chromium workflows covering persistence, pagination, validation, AI-disabled fallback, transient context/retry, and cancellation
+- Seven isolated Playwright Chromium workflows covering persistence, pagination, validation, AI-disabled fallback, transient context/retry, cancellation, and demo access control
 - A non-root Docker Compose demo with deterministic seed data, a named SQLite volume, and health checks
+- Optional shared demo credentials, per-client API limiting, a global model-run quota, and read-only hosted synthetic checks
 - Request IDs, content-free structured request logs, and aggregate request/assistant metrics
 - Five compatible CLI commands: `lookup`, `add`, `reverse`, `import`, and `list`
 - Forward calculations for multiple sell prices in one invocation
@@ -114,7 +115,7 @@ Or launch the same single-process application with a durable Docker volume:
 docker compose up --build --wait
 ```
 
-See the [demo and operations runbook](docs/DEMO_RUNBOOK.zh-CN.md) for the walkthrough, browser test, backup, restore, and rollback paths.
+See the [demo and operations runbook](docs/DEMO_RUNBOOK.zh-CN.md) for the walkthrough, browser test, backup, restore, and rollback paths. The [controlled hosted-demo runbook](docs/HOSTED_DEMO_RUNBOOK.zh-CN.md) defines the Railway HTTPS, secret, limit, persistent-volume, synthetic-check, and release boundary.
 
 ## Browser workbench
 
@@ -162,14 +163,20 @@ The source CSV is never modified. Existing source rows are skipped on repeat imp
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
+| `PORT` | empty | Hosting-platform port; binds `0.0.0.0:$PORT` when no explicit server address is set |
 | `STEAM_PROFIT_STORAGE` | `sqlite` | Web repository: `sqlite` or `csv` |
 | `STEAM_PROFIT_DATABASE_FILE` | `steam-profit.db` | SQLite database path |
 | `STEAM_PROFIT_RECORD_FILE` | `steam-profit-records.csv` | CSV path used in legacy mode |
 | `STEAM_PROFIT_IMPORT_CSV` | empty | Compatible CSV imported before SQLite startup |
+| `STEAM_PROFIT_DEMO_USERNAME` | empty | Optional shared demo username; configure with the password |
+| `STEAM_PROFIT_DEMO_PASSWORD` | empty | Optional shared demo password; at least 12 characters |
+| `STEAM_PROFIT_RATE_LIMIT_PER_MINUTE` | `0` | Per-client API requests per minute; `0` disables |
+| `STEAM_PROFIT_AI_RUNS_PER_HOUR` | `0` | Process-wide started model runs per hour; `0` disables |
+| `STEAM_PROFIT_TRUST_PROXY_HEADERS` | `false` | Enable only when a trusted proxy supplies `X-Real-IP` or `X-Forwarded-For` |
 
 Every HTTP response includes an `X-Request-ID`. Request logs contain method, path, status, duration, and request ID only; aggregate metrics omit query strings, bodies, prompts, model output, market data, credentials, and record values.
 
-This remains a local, single-user application. The browser may send at most six page-local prior messages, but conversations, provider responses, and tool evidence are never persisted. Authentication, rate limiting, scheduled live-model evaluation, managed backups, persistent telemetry, and public TLS are required before public deployment.
+This remains a local single-user application or a controlled demo for a small reviewer group. Shared Basic credentials can protect every page and API except health, while API limits and a model-run quota are independently configurable. A Railway deployment manifest is included, but this is not a full user system: registration, tenant isolation, cross-replica limits, persistent telemetry, and a verified managed backup are still absent. The browser may send at most six page-local prior messages, but conversations, provider responses, and tool evidence are never persisted.
 
 ## AI strategy assistant
 
@@ -210,6 +217,8 @@ make ai-eval-baseline
 ```
 
 The current-prompt report is written to `.build/evaluations/report.json`; the retained baseline writes `.build/evaluations/baseline-report.json`. Reports contain case IDs, prompt/model versions, observed tools, grounding, latency, token usage, threshold failures, and optional cost estimates. They omit credentials, prompt text, model prose, and tool values. Cost is calculated only when the caller supplies rates such as `--input-usd-per-million` and `--output-usd-per-million`; the project does not hard-code provider prices.
+
+The `Live AI Evaluation` GitHub workflow is manual-only and uses an injected repository secret for a bounded current/baseline comparison. Normal CI never calls a live model. Once a hosted URL is configured, `Hosted Demo Smoke` runs read-only checks every six hours without mutations or model calls. See the [controlled hosted-demo runbook](docs/HOSTED_DEMO_RUNBOOK.zh-CN.md) for setup.
 
 ## Commands
 

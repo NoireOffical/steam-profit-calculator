@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, request as playwrightRequest, test } from "@playwright/test";
 
 function assistantStatus() {
   return {
@@ -41,6 +41,32 @@ function successfulAssistantSSE(text = "已完成可信回答。") {
 }
 
 test.describe("deployable demo", () => {
+  test("requires demo credentials while keeping dependency health public", async ({ request }) => {
+    const anonymous = await playwrightRequest.newContext({
+      baseURL: "http://127.0.0.1:18080",
+      httpCredentials: { username: "anonymous", password: "invalid-password", send: "always" },
+    });
+    try {
+      const rejected = await anonymous.get("/");
+      expect(rejected.status()).toBe(401);
+      expect(rejected.headers()["www-authenticate"]).toContain("Basic");
+
+      const health = await anonymous.get("/api/health");
+      expect(health.ok()).toBeTruthy();
+      expect(await health.json()).toMatchObject({ data: { status: "ok" } });
+    } finally {
+      await anonymous.dispose();
+    }
+
+    const protectedPage = await request.get("/");
+    expect(protectedPage.ok()).toBeTruthy();
+    expect(await protectedPage.text()).toContain("Steam Profit Lab");
+
+    const metrics = await request.get("/api/v1/metrics");
+    expect(metrics.ok()).toBeTruthy();
+    expect((await metrics.json()).data.access.unauthorized).toBeGreaterThanOrEqual(1);
+  });
+
   test("persists a calculation across a browser reload", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("#system-status")).toContainText("计算引擎已连接");

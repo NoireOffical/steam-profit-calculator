@@ -77,6 +77,9 @@ func TestAssistantMetricsAndConcurrentRequests(t *testing.T) {
 		ElapsedMS: 125, ToolCalls: 2, InputTokens: 40, OutputTokens: 10, TotalTokens: 50,
 	})
 	metrics.AssistantFailed()
+	metrics.AccessUnauthorized()
+	metrics.AccessRateLimited()
+	metrics.AccessAssistantQuotaRejected()
 
 	handler := metrics.HTTPMiddleware(slog.New(slog.NewTextHandler(io.Discard, nil)), http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
@@ -97,6 +100,9 @@ func TestAssistantMetricsAndConcurrentRequests(t *testing.T) {
 	}
 	if snapshot.Assistant.Runs != 1 || snapshot.Assistant.Failures != 1 || snapshot.Assistant.ToolCalls != 2 || snapshot.Assistant.TotalTokens != 50 || snapshot.Assistant.DurationTotalMS != 125 {
 		t.Fatalf("assistant snapshot = %#v", snapshot.Assistant)
+	}
+	if snapshot.Access.Unauthorized != 1 || snapshot.Access.RateLimited != 1 || snapshot.Access.AssistantQuotaRejected != 1 {
+		t.Fatalf("access snapshot = %#v", snapshot.Access)
 	}
 }
 

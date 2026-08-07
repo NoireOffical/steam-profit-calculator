@@ -20,6 +20,10 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
 fi
 
 STEAM_PROFIT_AI_PROVIDER=disabled \
+STEAM_PROFIT_DEMO_USERNAME=e2e-reviewer \
+STEAM_PROFIT_DEMO_PASSWORD=e2e-demo-password \
+STEAM_PROFIT_RATE_LIMIT_PER_MINUTE=1000 \
+STEAM_PROFIT_AI_RUNS_PER_HOUR=100 \
   "${e2e_server_bin}" \
   --addr 127.0.0.1:18080 \
   --db "${e2e_runtime_dir}/records.db" \

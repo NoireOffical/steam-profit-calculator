@@ -14,6 +14,10 @@ export default defineConfig({
     : "line",
   use: {
     baseURL,
+    httpCredentials: {
+      username: "e2e-reviewer",
+      password: "e2e-demo-password",
+    },
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },

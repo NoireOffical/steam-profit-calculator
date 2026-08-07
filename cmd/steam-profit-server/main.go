@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -27,12 +29,20 @@ const (
 )
 
 func main() {
-	address := flag.String("addr", environmentOrDefault("STEAM_PROFIT_SERVER_ADDR", defaultAddress), "HTTP listen address")
+	defaultServerAddress, err := serverAddressFromEnvironment()
+	if err != nil {
+		log.Fatalf("load server address configuration: %v", err)
+	}
+	address := flag.String("addr", defaultServerAddress, "HTTP listen address")
 	storageMode := flag.String("storage", environmentOrDefault("STEAM_PROFIT_STORAGE", "sqlite"), "record storage: sqlite or csv")
 	databaseFile := flag.String("db", environmentOrDefault("STEAM_PROFIT_DATABASE_FILE", defaultDatabaseFile), "SQLite database path")
 	recordFile := flag.String("file", environmentOrDefault("STEAM_PROFIT_RECORD_FILE", defaultRecordFile), "legacy CSV record path used by CSV storage")
 	importCSV := flag.String("import-csv", environmentOrDefault("STEAM_PROFIT_IMPORT_CSV", ""), "compatible CSV file to import into SQLite before startup")
 	flag.Parse()
+	accessOptions, err := webapi.AccessOptionsFromEnvironment()
+	if err != nil {
+		log.Fatalf("load hosted demo access configuration: %v", err)
+	}
 
 	var recordStore storage.RecordRepository
 	switch strings.ToLower(strings.TrimSpace(*storageMode)) {
@@ -83,7 +93,7 @@ func main() {
 		lookupClient,
 		recordStore,
 		assistantService,
-		webapi.HandlerOptions{Logger: requestLogger},
+		webapi.HandlerOptions{Logger: requestLogger, Access: accessOptions},
 	)
 	if err != nil {
 		log.Fatalf("create web application: %v", err)
@@ -126,6 +136,21 @@ func environmentOrDefault(name, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func serverAddressFromEnvironment() (string, error) {
+	if address := strings.TrimSpace(os.Getenv("STEAM_PROFIT_SERVER_ADDR")); address != "" {
+		return address, nil
+	}
+	portValue := strings.TrimSpace(os.Getenv("PORT"))
+	if portValue == "" {
+		return defaultAddress, nil
+	}
+	port, err := strconv.Atoi(portValue)
+	if err != nil || port < 1 || port > 65535 {
+		return "", fmt.Errorf("PORT must be an integer between 1 and 65535")
+	}
+	return net.JoinHostPort("0.0.0.0", strconv.Itoa(port)), nil
 }
 
 func displayAddress(address string) string {

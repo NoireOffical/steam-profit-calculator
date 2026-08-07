@@ -40,6 +40,7 @@ type server struct {
 	recordStore   RecordStore
 	assistant     *assistant.Service
 	metrics       *observability.Metrics
+	access        *accessController
 	static        http.Handler
 }
 
@@ -47,6 +48,7 @@ type server struct {
 type HandlerOptions struct {
 	Logger  *slog.Logger
 	Metrics *observability.Metrics
+	Access  AccessOptions
 }
 
 type apiError struct {
@@ -175,12 +177,17 @@ func NewHandlerWithOptions(lookupClient lookup.Client, recordStore RecordStore, 
 	if logger == nil {
 		logger = slog.New(slog.NewJSONHandler(io.Discard, nil))
 	}
+	access, err := newAccessController(options.Access, metrics)
+	if err != nil {
+		return nil, fmt.Errorf("configure hosted demo access: %w", err)
+	}
 
 	app := &server{
 		lookupService: lookup.NewService(lookupClient),
 		recordStore:   recordStore,
 		assistant:     assistantService,
 		metrics:       metrics,
+		access:        access,
 		static:        http.FileServer(http.FS(web)),
 	}
 
@@ -196,7 +203,7 @@ func NewHandlerWithOptions(lookupClient lookup.Client, recordStore RecordStore, 
 	mux.HandleFunc("/api/", app.handleUnknownAPI)
 	mux.Handle("/", app.static)
 
-	return metrics.HTTPMiddleware(logger, securityHeaders(mux)), nil
+	return metrics.HTTPMiddleware(logger, securityHeaders(access.Middleware(mux))), nil
 }
 
 func (s *server) handleAssistantStatus(w http.ResponseWriter, r *http.Request) {
@@ -228,10 +235,15 @@ func (s *server) handleAssistantStream(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusUnprocessableEntity, "validation_error", err.Error())
 		return
 	}
-
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeAPIError(w, http.StatusInternalServerError, "streaming_unsupported", "response streaming is unavailable")
+		return
+	}
+	if allowed, retryAfter := s.access.allowAssistantRun(); !allowed {
+		s.metrics.AccessAssistantQuotaRejected()
+		writeRetryAfter(w, retryAfter)
+		writeAPIError(w, http.StatusTooManyRequests, "assistant_quota_exceeded", "AI assistant run quota exceeded; retry later")
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")

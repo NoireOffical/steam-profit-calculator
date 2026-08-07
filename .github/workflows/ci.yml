@@ -116,26 +116,44 @@ jobs:
       - name: Build and start Compose demo
         env:
           STEAM_PROFIT_PORT: 18081
+          STEAM_PROFIT_DEMO_USERNAME: ci-reviewer
+          STEAM_PROFIT_DEMO_PASSWORD: ci-demo-password
+          STEAM_PROFIT_RATE_LIMIT_PER_MINUTE: 6
+          STEAM_PROFIT_AI_RUNS_PER_HOUR: 3
         run: docker compose up --build --wait
 
-      - name: Verify health, metrics, and persistence
+      - name: Verify protected access, limits, and persistence
         env:
           STEAM_PROFIT_PORT: 18081
+          STEAM_PROFIT_DEMO_USERNAME: ci-reviewer
+          STEAM_PROFIT_DEMO_PASSWORD: ci-demo-password
+          STEAM_PROFIT_RATE_LIMIT_PER_MINUTE: 6
+          STEAM_PROFIT_AI_RUNS_PER_HOUR: 3
         run: |
           curl --fail --silent --show-error http://127.0.0.1:18081/api/health
-          curl --fail --silent --show-error http://127.0.0.1:18081/api/v1/metrics
+          test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18081/)" = "401"
+          curl --fail --silent --show-error --user 'ci-reviewer:ci-demo-password' http://127.0.0.1:18081/api/v1/metrics
           curl --fail --silent --show-error \
+            --user 'ci-reviewer:ci-demo-password' \
             --request POST \
             --header 'Content-Type: application/json' \
             --data '{"item_name":"CI Container","buy_price":0.48,"quantity":1,"multiplier":0.837,"sell_prices":[0.8]}' \
             http://127.0.0.1:18081/api/v1/calculations
           docker compose up --force-recreate --wait
           curl --fail --silent --show-error \
+            --user 'ci-reviewer:ci-demo-password' \
             'http://127.0.0.1:18081/api/v1/records?item=CI%20Container' \
             | grep --quiet '"total":1'
           curl --fail --silent --show-error \
+            --user 'ci-reviewer:ci-demo-password' \
             'http://127.0.0.1:18081/api/v1/records?item=Demo%20Capsule' \
             | grep --quiet '"total":12'
+          for request_number in 1 2 3 4; do
+            curl --fail --silent --show-error \
+              --user 'ci-reviewer:ci-demo-password' \
+              http://127.0.0.1:18081/api/v1/assistant/status >/dev/null
+          done
+          test "$(curl --silent --show-error --user 'ci-reviewer:ci-demo-password' --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18081/api/v1/metrics)" = "429"
 
       - name: Show container logs on failure
         if: failure()

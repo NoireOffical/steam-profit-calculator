@@ -1,0 +1,45 @@
+name: Hosted Demo Smoke
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Optional HTTPS demo URL; defaults to repository variable STEAM_PROFIT_DEMO_URL
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hosted-demo-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Read-only hosted checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      STEAM_PROFIT_DEMO_URL: ${{ inputs.base_url || vars.STEAM_PROFIT_DEMO_URL }}
+      STEAM_PROFIT_DEMO_USERNAME: ${{ secrets.STEAM_PROFIT_DEMO_USERNAME }}
+      STEAM_PROFIT_DEMO_PASSWORD: ${{ secrets.STEAM_PROFIT_DEMO_PASSWORD }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Check configured hosted demo
+        run: |
+          if [[ -z "${STEAM_PROFIT_DEMO_URL}" ]]; then
+            echo "::notice::Set repository variable STEAM_PROFIT_DEMO_URL to enable scheduled hosted checks"
+            exit 0
+          fi
+          if [[ -z "${STEAM_PROFIT_DEMO_USERNAME}" || -z "${STEAM_PROFIT_DEMO_PASSWORD}" ]]; then
+            echo "::error::Repository secrets STEAM_PROFIT_DEMO_USERNAME and STEAM_PROFIT_DEMO_PASSWORD are required for hosted checks"
+            exit 1
+          fi
+          bash script/hosted_smoke.sh

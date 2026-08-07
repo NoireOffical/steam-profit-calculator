@@ -1,0 +1,150 @@
+# 受控托管演示运行手册
+
+本手册定义 `v0.6.0` 受控在线演示的最低运行契约。当前仓库已经实现平台无关的访问控制、限流、模型配额、只读线上检查和手动真实模型评测，并已选择 Railway、加入 `railway.toml`。在实际 Railway 项目、持久卷和域名通过验收前，仍没有可公开声明的线上地址。
+
+这套边界用于“把作品集安全地给少量评审访问”，不是完整账号系统，也不代表项目已经适合公开运营。
+
+## 最低托管契约
+
+托管环境必须同时满足以下条件：
+
+- 只运行一个应用副本；当前 SQLite 不支持多个实例共享写入；
+- 公网入口必须使用 HTTPS，HTTP 只能用于本机冒烟；
+- 使用仓库 `Dockerfile` 构建并以非 root 运行；应用只把持久数据写入 `/data`，平台支持时再启用只读根文件系统；
+- 把可持久化卷挂载到 `/data`，数据库固定为 `/data/steam-profit.db`；
+- 所有凭据通过平台 Secret 或环境变量注入，不写入镜像、部署清单、日志或 Git；
+- 健康检查访问公开的 `GET /api/health`；其他页面与 API 由演示凭据保护；
+- 转发头只有在平台明确提供客户端地址头时才可被信任；Railway 直接入口使用其 `X-Real-IP`；
+- 停止应用时允许至少 10 秒优雅退出；回滚必须使用固定 Tag 对应的不可变镜像。
+
+推荐的生产演示环境值如下；实际密码不要直接写进命令历史：
+
+| 变量 | 推荐值 | 说明 |
+| --- | --- | --- |
+| `PORT` | Railway 自动注入 | 未显式设置服务地址时，应用监听 `0.0.0.0:$PORT` |
+| `STEAM_PROFIT_STORAGE` | `sqlite` | 当前受支持的单实例仓储 |
+| `STEAM_PROFIT_DATABASE_FILE` | `/data/steam-profit.db` | 必须位于持久卷 |
+| `STEAM_PROFIT_DEMO_USERNAME` | 平台 Secret | 演示评审用户名；不能包含冒号或换行 |
+| `STEAM_PROFIT_DEMO_PASSWORD` | 平台 Secret | 至少 12 个字符；可随时轮换 |
+| `STEAM_PROFIT_RATE_LIMIT_PER_MINUTE` | `120` | 每客户端、每分钟 API 请求上限；`0` 表示关闭 |
+| `STEAM_PROFIT_AI_RUNS_PER_HOUR` | `12` | 整个实例每小时实际启动的模型调用上限；`0` 表示关闭 |
+| `STEAM_PROFIT_TRUST_PROXY_HEADERS` | Railway 直连时设 `true` | 读取 Railway 提供的 `X-Real-IP`；更换代理链时重新评估 |
+
+`GET /api/health` 保持公开，便于平台判断数据库依赖是否可用。浏览器首页、静态资源和其余 API 在配置了用户名与密码后都需要 HTTP Basic 凭据。该方案只有一组共享演示凭据，不提供注册、找回密码、角色、租户或用户数据隔离。
+
+## Railway 部署配置
+
+仓库根目录的 `railway.toml` 固定使用现有 `Dockerfile`，把 `/api/health` 设为部署健康检查，失败时最多重启 3 次，并给应用 10 秒排空时间。服务端优先读取显式的 `STEAM_PROFIT_SERVER_ADDR`；未设置时会读取 Railway 注入的 `PORT` 并监听所有容器网卡。非法端口会在打开数据库前阻止启动。
+
+Railway 项目必须按以下顺序配置：
+
+1. 从 GitHub 仓库 `NoireOffical/steam-profit-calculator` 的 `main` 分支创建一个服务；
+2. 确认构建来源显示根目录 `Dockerfile`，部署配置来自 `/railway.toml`；
+3. 只保留 1 个副本，并选择离主要评审较近的单一区域；
+4. 给同一服务添加一个 Volume，挂载路径必须是 `/data`；
+5. 生成 Railway 公共域名；Railway 入口负责 HTTPS，应用容器内部继续使用 HTTP；
+6. 在服务 Variables 中注入下表变量，不要把真实值写回仓库；
+7. 首次部署成功后运行只读 hosted smoke，再做计算、重启和历史读取验收。
+
+Railway 服务变量：
+
+| 变量 | Railway 值 |
+| --- | --- |
+| `STEAM_PROFIT_STORAGE` | `sqlite` |
+| `STEAM_PROFIT_DATABASE_FILE` | `/data/steam-profit.db` |
+| `STEAM_PROFIT_IMPORT_CSV` | `/app/demo/seed.csv` |
+| `STEAM_PROFIT_DEMO_USERNAME` | 随机或专用评审用户名 |
+| `STEAM_PROFIT_DEMO_PASSWORD` | 至少 12 位的随机 Secret |
+| `STEAM_PROFIT_RATE_LIMIT_PER_MINUTE` | `120` |
+| `STEAM_PROFIT_AI_RUNS_PER_HOUR` | `12` |
+| `STEAM_PROFIT_TRUST_PROXY_HEADERS` | `true` |
+| `STEAM_PROFIT_AI_PROVIDER` | 首次部署保持 `disabled`；模型验收后再改为 `openai` |
+
+不要设置 `STEAM_PROFIT_SERVER_ADDR`，让应用跟随 Railway 的 `PORT`。Railway 官方说明其公共入口使用 HTTPS，并提供 `X-Real-IP` 表示客户端地址：[Public networking specs and limits](https://docs.railway.com/networking/public-networking/specs-and-limits)。Railway 带 Volume 的服务在更新时不会同时把同一个卷挂载到两个部署，因此发布切换会有短暂停机：[Healthchecks — services with attached volumes](https://docs.railway.com/deployments/healthchecks#services-with-attached-volumes)。这与当前单实例 SQLite 边界一致。
+
+## 模型密钥与手动质量评测
+
+如果线上演示启用 OpenAI Provider，把 `OPENAI_API_KEY` 或 `STEAM_PROFIT_AI_API_KEY` 保存为托管平台 Secret。不要把密钥写进 `.env.example`、工作流文件、镜像层或公开仓库。OpenAI 官方也建议通过环境变量或密钥管理服务加载密钥，并避免在代码和公开仓库中暴露密钥：[Production best practices — API keys](https://developers.openai.com/api/docs/guides/production-best-practices#api-keys)。
+
+GitHub 仓库可配置：
+
+| 类型 | 名称 | 用途 |
+| --- | --- | --- |
+| Actions Secret | `OPENAI_API_KEY` | 仅供手动 `Live AI Evaluation` 工作流使用 |
+| Actions Variable | `OPENAI_MODEL` | 可选；覆盖评测模型 |
+| Actions Secret | `STEAM_PROFIT_DEMO_USERNAME` | 线上只读检查的演示用户名 |
+| Actions Secret | `STEAM_PROFIT_DEMO_PASSWORD` | 线上只读检查的演示密码 |
+| Actions Variable | `STEAM_PROFIT_DEMO_URL` | HTTPS 演示根地址 |
+
+`Live AI Evaluation` 只能手动触发。默认分别对当前 Prompt 和基线 Prompt 执行 3 条版本化语义用例，并上传不含 Prompt、模型原文、工具值和密钥的 JSON 报告。调用费率与成本上限由触发者在当次运行中填写，普通 CI 不会产生模型费用。
+
+轮换模型密钥时，先在供应商创建新密钥并替换平台 Secret，重启单实例验证助手状态，再撤销旧密钥。演示密码也可以直接替换后重启；替换后同步更新 GitHub Actions Secret。
+
+## 本地受保护模式冒烟
+
+先构建服务，再通过你自己的安全环境注入凭据：
+
+```bash
+make build
+export STEAM_PROFIT_DEMO_USERNAME="reviewer"
+export STEAM_PROFIT_DEMO_PASSWORD="replace-with-a-long-local-password"
+export STEAM_PROFIT_RATE_LIMIT_PER_MINUTE="120"
+export STEAM_PROFIT_AI_RUNS_PER_HOUR="12"
+./.build/steam-profit-server --addr 127.0.0.1:8080 --db .build/hosted-demo.db
+```
+
+另一个终端运行只读检查。只有本机 HTTP 测试才允许显式绕过 HTTPS 要求：
+
+```bash
+export STEAM_PROFIT_DEMO_URL="http://127.0.0.1:8080"
+export STEAM_PROFIT_ALLOW_HTTP_SMOKE="true"
+bash script/hosted_smoke.sh
+```
+
+脚本依次确认公开健康检查、匿名首页 `401`、认证后的浏览器页面和助手状态。它不会提交计算、写入记录，也不会发起付费模型请求。
+
+## 线上检查与最小告警
+
+`Hosted Demo Smoke` 工作流每 6 小时运行一次，也可手动提供临时 URL。配置 `STEAM_PROFIT_DEMO_URL` 后，它执行与本地相同的只读检查；失败时 GitHub Actions 会把本次工作流标记为失败，作为当前的最小告警渠道。
+
+当前日志和指标仍是进程内数据：
+
+- 日志只包含请求方法、路径、状态、耗时和随机请求 ID；
+- 指标只累计请求、助手调用、未授权、限流和模型配额拒绝次数；
+- 重启会清空指标；仓库尚未接入远程采集、长期趋势、通知升级或值班系统。
+
+## 备份、恢复与回滚
+
+### 备份
+
+至少在每个发布和数据库迁移前生成一次一致性备份。平台支持卷快照时优先使用卷快照；否则先停止单实例，再归档整个 `/data` 目录。备份完成后检查 SQLite 完整性，并记录备份对应的应用 Tag。
+
+不要把数据库备份提交到 Git。备份可能包含演示计算记录，应保存到受控对象存储或平台备份空间，并设置保留期。
+
+### 恢复演练
+
+恢复时先创建新卷或临时服务，不覆盖当前卷：
+
+1. 把备份恢复到新卷的 `/data/steam-profit.db`；
+2. 使用同一固定 Tag 启动一个单副本实例；
+3. 检查 `/api/health`，再运行 `script/hosted_smoke.sh`；
+4. 人工确认历史记录数量和最近一条记录；
+5. 验收后再切换流量，保留旧卷直到回滚窗口结束。
+
+### 应用回滚
+
+当前稳定回滚点是 `v0.5.0`。回滚时固定旧 Tag 的镜像，保留同一持久卷并保持单实例；先检查该版本是否理解当前数据库迁移，再切换流量。若存储兼容性存在疑问，使用发布前备份恢复到新卷，不要降级覆盖唯一数据副本。
+
+更具体的本地 SQLite 和 Compose 归档命令见[演示与运行手册](DEMO_RUNBOOK.zh-CN.md)。
+
+## 当前边界与上线阻塞项
+
+Railway 清单完成后，仍需以下证据才能称为“在线演示已上线”：
+
+1. 创建 Railway 项目，确认实际套餐和 Volume 费用边界；
+2. 固定单副本、公共 HTTPS 域名、Secret 和 `/data` Volume；
+3. 实际部署后运行一次线上只读 smoke；
+4. 完成一次备份与新卷恢复演练；
+5. 如提供临时模型密钥，再生成一次当前/基线真实模型报告。
+
+在这些条件满足前，仓库只能声明“受控托管能力已准备”，不能声明已经存在公开可访问的托管实例或真实模型基线。

@@ -22,7 +22,7 @@ COPY demo/seed.csv /app/demo/seed.csv
 USER steam-profit
 WORKDIR /data
 
-ENV STEAM_PROFIT_SERVER_ADDR=0.0.0.0:8080 \
+ENV PORT=8080 \
     STEAM_PROFIT_STORAGE=sqlite \
     STEAM_PROFIT_DATABASE_FILE=/data/steam-profit.db \
     STEAM_PROFIT_AI_PROVIDER=disabled
@@ -31,6 +31,6 @@ EXPOSE 8080
 VOLUME ["/data"]
 
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
-  CMD wget -q -T 2 -O /dev/null http://127.0.0.1:8080/api/health || exit 1
+  CMD wget -q -T 2 -O /dev/null "http://127.0.0.1:${PORT}/api/health" || exit 1
 
 ENTRYPOINT ["/app/steam-profit-server"]
