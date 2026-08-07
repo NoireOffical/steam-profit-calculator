@@ -21,6 +21,6 @@
 ## 4. Verification And Release
 
 - [x] 4.1 Run formatting, JavaScript syntax validation, vet, race tests, all binaries, deterministic evaluation, and Chromium E2E
-- [ ] 4.2 Run remote container validation for protected startup, health, authentication, rate limiting, quota, restart persistence, and graceful stop
+- [x] 4.2 Run remote container validation for protected startup, health, authentication, rate limiting, quota, restart persistence, and graceful stop
 - [ ] 4.3 Run a manual hosted smoke when a target exists; do not claim a live deployment or real-model baseline without credentials and evidence
 - [ ] 4.4 Update README, roadmap, demo runbook, changelog, and prepare immutable `v0.6.0` Pre-release notes after the demonstrable milestone is complete

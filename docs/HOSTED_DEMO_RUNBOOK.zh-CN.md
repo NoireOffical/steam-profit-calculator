@@ -41,7 +41,7 @@ Railway 项目必须按以下顺序配置：
 1. 从 GitHub 仓库 `NoireOffical/steam-profit-calculator` 的 `main` 分支创建一个服务；
 2. 确认构建来源显示根目录 `Dockerfile`，部署配置来自 `/railway.toml`；
 3. 只保留 1 个副本，并选择离主要评审较近的单一区域；
-4. 给同一服务添加一个 Volume，挂载路径必须是 `/data`；
+4. 给同一服务添加一个 Railway Volume，挂载路径必须是 `/data`；Railway 不接受 Dockerfile 的 `VOLUME` 指令，因此持久化只由平台挂载配置负责；
 5. 生成 Railway 公共域名；Railway 入口负责 HTTPS，应用容器内部继续使用 HTTP；
 6. 在服务 Variables 中注入下表变量，不要把真实值写回仓库；
 7. 首次部署成功后运行只读 hosted smoke，再做计算、重启和历史读取验收。

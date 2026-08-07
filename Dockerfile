@@ -28,7 +28,6 @@ ENV PORT=8080 \
     STEAM_PROFIT_AI_PROVIDER=disabled
 
 EXPOSE 8080
-VOLUME ["/data"]
 
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
   CMD wget -q -T 2 -O /dev/null "http://127.0.0.1:${PORT}/api/health" || exit 1
