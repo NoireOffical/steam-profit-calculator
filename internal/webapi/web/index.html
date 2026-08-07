@@ -47,7 +47,7 @@
         <section class="assistant-lab" aria-labelledby="assistant-title">
           <aside class="assistant-intro">
             <div>
-              <p class="eyebrow">AI STRATEGY ASSISTANT · MVP</p>
+              <p class="eyebrow">AI STRATEGY ASSISTANT · QUALITY LAB</p>
               <h2 id="assistant-title">用自然语言提问，<br><span>用工具结果作答。</span></h2>
               <p>助手负责理解目标和解释结果，市场查询与所有金额仍由下方同一套可信引擎完成。</p>
             </div>
@@ -61,7 +61,7 @@
               <button type="button" data-assistant-prompt="Capsule 买入价 0.48，数量 2，净倍率 0.85，目标总收益 0.40，需要卖多少钱？">反推目标卖价</button>
               <button type="button" data-assistant-prompt="查询 AK-47 Redline 的 Steam 市场摘要，返回 3 个候选。">查询市场快照</button>
             </div>
-            <p class="assistant-privacy">对话仅在当前页面显示，不写入计算历史。工具结果仅供研究，不构成投资或交易建议。</p>
+            <p class="assistant-privacy">最近 6 条对话仅在当前页面显示，不写入数据库或日志。历史内容不是数值依据，后续计算仍会重新调用可信工具。</p>
           </aside>
 
           <article class="assistant-console" aria-label="AI 策略助手对话">
@@ -84,7 +84,11 @@
               <textarea id="assistant-input" name="message" rows="3" maxlength="4000" placeholder="例如：0.48 买入 5 件，0.80 卖出时总收益是多少？" required></textarea>
               <div class="assistant-form-footer">
                 <span id="assistant-form-hint">关键数值必须通过工具验证</span>
-                <button id="assistant-submit" class="primary-button accent-button" type="submit">发送问题</button>
+                <div class="assistant-actions">
+                  <button id="assistant-retry" class="secondary-button" type="button" hidden>重试</button>
+                  <button id="assistant-stop" class="secondary-button stop-button" type="button" hidden>停止</button>
+                  <button id="assistant-submit" class="primary-button accent-button" type="submit">发送问题</button>
+                </div>
               </div>
             </form>
           </article>

@@ -1,5 +1,45 @@
 import { expect, test } from "@playwright/test";
 
+function assistantStatus() {
+  return {
+    data: {
+      available: true,
+      provider: "fixture",
+      model: "fixture-stream",
+      prompt_version: "steam-profit-assistant-v1.1.0",
+      native_streaming: true,
+      retry_supported: true,
+      max_history_messages: 6,
+    },
+  };
+}
+
+function assistantSSE(events) {
+  return `${events.map(({ name, payload }) => `event: ${name}\ndata: ${JSON.stringify(payload)}\n\n`).join("")}`;
+}
+
+function successfulAssistantSSE(text = "已完成可信回答。") {
+  return assistantSSE([
+    { name: "status", payload: { message: "正在生成回答…" } },
+    { name: "delta", payload: { text } },
+    {
+      name: "done",
+      payload: {
+        completion: {
+          provider: "fixture",
+          model: "fixture-stream",
+          prompt_version: "steam-profit-assistant-v1.1.0",
+          grounded: true,
+          native_streaming: true,
+          tool_count: 0,
+          elapsed_ms: 12,
+          usage: { input_tokens: 8, output_tokens: 4, total_tokens: 12 },
+        },
+      },
+    },
+  ]);
+}
+
 test.describe("deployable demo", () => {
   test("persists a calculation across a browser reload", async ({ page }) => {
     await page.goto("/");
@@ -65,5 +105,73 @@ test.describe("deployable demo", () => {
     await expect(page.locator("#assistant-submit")).toBeDisabled();
     await expect(page.locator("#calculation-form button[type='submit']")).toBeEnabled();
     await expect(page.locator("#assistant-form-hint")).toHaveText("现有查询和确定性计算仍可正常使用");
+  });
+
+  test("keeps bounded page-local context and explicitly retries a failed turn", async ({ page }) => {
+    await page.route("**/api/v1/assistant/status", (route) => route.fulfill({ json: assistantStatus() }));
+    const requests = [];
+    await page.route("**/api/v1/assistant/stream", async (route) => {
+      const payload = route.request().postDataJSON();
+      requests.push(payload);
+      if (requests.length === 2) {
+        await route.fulfill({
+          status: 200,
+          contentType: "text/event-stream; charset=utf-8",
+          body: assistantSSE([{ name: "error", payload: { error: { code: "assistant_error", message: "临时失败", retryable: true } } }]),
+        });
+        return;
+      }
+      await route.fulfill({ status: 200, contentType: "text/event-stream; charset=utf-8", body: successfulAssistantSSE() });
+    });
+
+    await page.goto("/");
+    await expect(page.locator("#assistant-status")).toContainText("fixture-stream");
+    await page.locator("#assistant-input").fill("第一轮问题");
+    await page.locator("#assistant-submit").click();
+    await expect(page.locator(".assistant-completion").last()).toContainText("Provider 原生流");
+
+    await page.locator("#assistant-input").fill("继续上一轮");
+    await page.locator("#assistant-submit").click();
+    await expect(page.locator(".error-message").last()).toContainText("临时失败");
+    await expect(page.locator("#assistant-retry")).toBeVisible();
+    await page.locator("#assistant-retry").click();
+    await expect(page.locator(".assistant-completion")).toHaveCount(2);
+
+    expect(requests).toHaveLength(3);
+    expect(requests[0].history).toEqual([]);
+    expect(requests[1].history).toEqual([
+      { role: "user", content: "第一轮问题" },
+      { role: "assistant", content: "已完成可信回答。" },
+    ]);
+    expect(requests[2]).toEqual(requests[1]);
+  });
+
+  test("stops an active assistant request without affecting calculation history", async ({ page }) => {
+    await page.route("**/api/v1/assistant/status", (route) => route.fulfill({ json: assistantStatus() }));
+    let attempts = 0;
+    await page.route("**/api/v1/assistant/stream", async (route) => {
+      attempts += 1;
+      if (attempts === 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+      }
+      try {
+        await route.fulfill({ status: 200, contentType: "text/event-stream; charset=utf-8", body: successfulAssistantSSE() });
+      } catch {
+        // The first intercepted request is expected to be aborted by the page.
+      }
+    });
+
+    await page.goto("/");
+    const initialSummary = await page.locator("#history-page-summary").textContent();
+    await page.locator("#assistant-input").fill("停止这个请求");
+    await page.locator("#assistant-submit").click();
+    await expect(page.locator("#assistant-stop")).toBeVisible();
+    await page.locator("#assistant-stop").click();
+    await expect(page.locator(".error-message").last()).toContainText("请求已停止");
+    await expect(page.locator("#assistant-retry")).toBeVisible();
+    await expect(page.locator("#assistant-input")).toBeEnabled();
+
+    await page.locator("#refresh-history").click();
+    await expect(page.locator("#history-page-summary")).toHaveText(initialSummary);
   });
 });

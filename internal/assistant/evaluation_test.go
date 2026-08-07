@@ -48,8 +48,8 @@ func TestFixedEvaluationBaseline(t *testing.T) {
 	if err := json.Unmarshal(raw, &cases); err != nil {
 		t.Fatalf("decode evaluation fixture: %v", err)
 	}
-	if len(cases) != 30 {
-		t.Fatalf("evaluation cases = %d, want exactly 30", len(cases))
+	if len(cases) != 50 {
+		t.Fatalf("evaluation cases = %d, want exactly 50", len(cases))
 	}
 
 	runner, err := NewToolRunner(evaluationLookup{})

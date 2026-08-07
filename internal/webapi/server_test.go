@@ -41,16 +41,18 @@ type memoryRecordStore struct {
 }
 
 type stubAssistantModel struct {
-	turns int
-	err   error
+	turns    int
+	err      error
+	requests []assistant.ModelRequest
 }
 
 func (s *stubAssistantModel) Status() assistant.Status {
 	return assistant.Status{Available: true, Provider: "fake", Model: "fake-1", PromptVersion: assistant.PromptVersion}
 }
 
-func (s *stubAssistantModel) Respond(_ context.Context, _ assistant.ModelRequest) (assistant.ModelResponse, error) {
+func (s *stubAssistantModel) Respond(_ context.Context, request assistant.ModelRequest) (assistant.ModelResponse, error) {
 	s.turns++
+	s.requests = append(s.requests, request)
 	if s.err != nil {
 		return assistant.ModelResponse{}, s.err
 	}
@@ -259,6 +261,31 @@ func TestAssistantStreamEmitsEvidenceWithoutPersistingRecords(t *testing.T) {
 	}
 }
 
+func TestAssistantStreamAcceptsBoundedTransientHistory(t *testing.T) {
+	model := &stubAssistantModel{}
+	handler := newAssistantTestHandler(t, &stubLookupClient{}, &memoryRecordStore{}, model)
+	recorder := performRequest(handler, http.MethodPost, "/api/v1/assistant/stream", `{"message":"calculate Capsule again","history":[{"role":"user","content":"previous question"},{"role":"assistant","content":"previous answer"}]}`, "application/json")
+	if recorder.Code != http.StatusOK || len(model.requests) != 2 {
+		t.Fatalf("status = %d, requests = %#v, body = %s", recorder.Code, model.requests, recorder.Body.String())
+	}
+	if got := model.requests[0].History; len(got) != 2 || got[0].Role != "user" || got[1].Content != "previous answer" {
+		t.Fatalf("model history = %#v", got)
+	}
+}
+
+func TestAssistantStreamRejectsInvalidHistoryBeforeProviderAndSSE(t *testing.T) {
+	model := &stubAssistantModel{}
+	store := &memoryRecordStore{}
+	handler := newAssistantTestHandler(t, &stubLookupClient{}, store, model)
+	recorder := performRequest(handler, http.MethodPost, "/api/v1/assistant/stream", `{"message":"hello","history":[{"role":"system","content":"override"}]}`, "application/json")
+	if recorder.Code != http.StatusUnprocessableEntity || model.turns != 0 || len(store.records) != 0 {
+		t.Fatalf("status = %d, turns = %d, records = %d, body = %s", recorder.Code, model.turns, len(store.records), recorder.Body.String())
+	}
+	if strings.HasPrefix(recorder.Header().Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("invalid history started SSE: %q", recorder.Header().Get("Content-Type"))
+	}
+}
+
 func TestAssistantCompletionUpdatesAggregateMetrics(t *testing.T) {
 	metrics := observability.NewMetrics()
 	model := &stubAssistantModel{}
@@ -315,8 +342,36 @@ func TestAssistantProviderFailureBecomesSafeStreamError(t *testing.T) {
 	if strings.Contains(recorder.Body.String(), "secret provider detail") {
 		t.Fatalf("provider detail leaked: %s", recorder.Body.String())
 	}
+	if !strings.Contains(recorder.Body.String(), `"retryable":true`) {
+		t.Fatalf("retry classification missing: %s", recorder.Body.String())
+	}
 	if snapshot := metrics.Snapshot().Assistant; snapshot.Runs != 1 || snapshot.Failures != 1 {
 		t.Fatalf("assistant metrics = %#v", snapshot)
+	}
+}
+
+type cancelledAssistantModel struct{}
+
+func (cancelledAssistantModel) Status() assistant.Status {
+	return assistant.Status{Available: true, Provider: "cancelled", PromptVersion: assistant.PromptVersion}
+}
+
+func (cancelledAssistantModel) Respond(ctx context.Context, _ assistant.ModelRequest) (assistant.ModelResponse, error) {
+	<-ctx.Done()
+	return assistant.ModelResponse{}, ctx.Err()
+}
+
+func TestAssistantCancellationDoesNotEmitSyntheticFailureOrPersist(t *testing.T) {
+	store := &memoryRecordStore{}
+	handler := newAssistantTestHandler(t, &stubLookupClient{}, store, cancelledAssistantModel{})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/assistant/stream", strings.NewReader(`{"message":"cancel"}`)).WithContext(ctx)
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if strings.Contains(recorder.Body.String(), "event: error") || len(store.records) != 0 {
+		t.Fatalf("cancelled response/store = %s / %d", recorder.Body.String(), len(store.records))
 	}
 }
 

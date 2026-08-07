@@ -82,6 +82,11 @@ jobs:
       - name: Install browser dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check browser JavaScript syntax
+        run: |
+          node --check internal/webapi/web/app.js
+          node --check tests/e2e/demo.spec.js
+
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
 

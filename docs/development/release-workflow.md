@@ -49,3 +49,4 @@ Pre-release status is required until the public-operation checklist covers durab
 | `v0.1.0` | Web application foundation | Pre-release |
 | `v0.2.0` | AI strategy assistant MVP | Pre-release |
 | `v0.3.0` | Versioned SQLite data layer and history explorer | Pre-release |
+| `v0.4.0` | Deployable demo, browser E2E, and safe runtime observability | Pre-release |

@@ -1,7 +1,9 @@
 CLI_APP := steam-profit
 SERVER_APP := steam-profit-server
+EVAL_APP := steam-profit-eval
 CLI_PACKAGE := ./cmd/steam-profit
 SERVER_PACKAGE := ./cmd/steam-profit-server
+EVAL_PACKAGE := ./cmd/steam-profit-eval
 BUILD_DIR := .build
 GO_LDFLAGS :=
 POST_BUILD := true
@@ -13,7 +15,7 @@ GO_LDFLAGS := -linkmode=external
 POST_BUILD := codesign --force --sign -
 endif
 
-.PHONY: build check clean container-check demo-run e2e e2e-install fmt fmt-check js-check run-web test test-race vet
+.PHONY: ai-eval ai-eval-baseline build check clean container-check demo-run e2e e2e-install fmt fmt-check js-check run-web test test-race vet
 
 build:
 	mkdir -p $(BUILD_DIR)
@@ -21,6 +23,8 @@ build:
 	$(POST_BUILD) $(BUILD_DIR)/$(CLI_APP)
 	go build -trimpath -ldflags="$(GO_LDFLAGS)" -o $(BUILD_DIR)/$(SERVER_APP) $(SERVER_PACKAGE)
 	$(POST_BUILD) $(BUILD_DIR)/$(SERVER_APP)
+	go build -trimpath -ldflags="$(GO_LDFLAGS)" -o $(BUILD_DIR)/$(EVAL_APP) $(EVAL_PACKAGE)
+	$(POST_BUILD) $(BUILD_DIR)/$(EVAL_APP)
 
 run-web:
 	go run $(SERVER_PACKAGE)
@@ -28,6 +32,12 @@ run-web:
 demo-run: build
 	mkdir -p $(BUILD_DIR)/demo
 	$(BUILD_DIR)/$(SERVER_APP) --addr 127.0.0.1:8080 --db $(BUILD_DIR)/demo/steam-profit.db --import-csv demo/seed.csv
+
+ai-eval:
+	go run $(EVAL_PACKAGE) --live --prompt-version current
+
+ai-eval-baseline:
+	go run $(EVAL_PACKAGE) --live --prompt-version baseline --output $(BUILD_DIR)/evaluations/baseline-report.json
 
 e2e-install:
 	$(PNPM) install --frozen-lockfile

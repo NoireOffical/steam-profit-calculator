@@ -56,14 +56,45 @@ pnpm exec playwright install chromium
 make e2e
 ```
 
-四条 Chromium 用例会在临时数据库中验证：
+六条 Chromium 用例会在临时数据库中验证：
 
 - 计算保存后刷新页面仍可读取；
 - 12 条固定种子记录的筛选与两页分页；
 - 浏览器输入错误不会生成历史；
 - AI 关闭时确定性计算仍然可用。
+- 最多 6 条页面内上下文会随下一轮发送，Provider 失败后只能由用户显式重试；
+- 活跃助手请求可停止，且取消不会改变计算历史。
 
 测试结束后临时数据库会被清理，不会写入正式的 `steam-profit.db`。
+
+## AI 质量评测演示（可选真实模型）
+
+没有模型密钥时，普通 `make check` 和 `make e2e` 仍会验证 50 条确定性工具基线、脚本化报告、AI 关闭降级、停止和重试状态。要生成真实模型小规模报告，使用临时密钥并显式运行：
+
+```bash
+export STEAM_PROFIT_AI_PROVIDER=openai
+export STEAM_PROFIT_AI_API_KEY="temporary-key"
+make ai-eval
+make ai-eval-baseline
+```
+
+默认各运行语义套件的前 3 条，报告分别位于 `.build/evaluations/report.json` 和 `.build/evaluations/baseline-report.json`。检查以下字段：
+
+- `prompt_version` 与 `model` 是否符合预期；
+- `observed_tools` 是否与用例预期一致；
+- `grounded`、延迟、Token 和阈值失败；
+- 当前 Prompt 与基线 Prompt 的通过率差异。
+
+报告只包含版本、用例 ID 和聚合执行元数据，不包含密钥、Prompt 原文、模型回答或工具值。若要估算成本，直接运行 `.build/steam-profit-eval` 并传入当前供应商价格；项目不会固化易过期价格：
+
+```bash
+./.build/steam-profit-eval --live \
+  --input-usd-per-million <input-rate> \
+  --output-usd-per-million <output-rate> \
+  --max-cost-usd <budget>
+```
+
+本地没有临时模型密钥时，不应伪造真实模型报告；在里程碑验收记录中标注“命令和失败路径已验证、付费 smoke 待执行”即可。
 
 ## SQLite 备份与恢复
 

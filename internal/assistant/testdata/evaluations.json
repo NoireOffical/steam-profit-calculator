@@ -30,5 +30,28 @@
   {"id":"lookup-005","tool":"lookup_items","arguments":{"query":"missing","limit":3},"verified":false,"contains":["\"code\":\"no_matches\""]},
   {"id":"lookup-006","tool":"lookup_items","arguments":{"query":"provider-down","limit":3},"verified":false,"contains":["\"code\":\"provider_error\""]},
   {"id":"lookup-007","tool":"lookup_items","arguments":{"query":"","limit":3},"verified":false,"contains":["\"code\":\"invalid_arguments\""]},
-  {"id":"lookup-008","tool":"lookup_items","arguments":{"query":"AK","limit":11},"verified":false,"contains":["\"code\":\"invalid_arguments\"","between 1 and 10"]}
+  {"id":"lookup-008","tool":"lookup_items","arguments":{"query":"AK","limit":11},"verified":false,"contains":["\"code\":\"invalid_arguments\"","between 1 and 10"]},
+
+  {"id":"calc-013","tool":"calculate_profit","arguments":{"item_name":"Unknown Field","buy_price":0.48,"quantity":1,"multiplier":0.837,"sell_prices":[0.8],"extra":true},"verified":false,"contains":["\"code\":\"invalid_arguments\"","unknown field"]},
+  {"id":"calc-014","tool":"calculate_profit","arguments":{"item_name":"Too Many Sells","buy_price":0.48,"quantity":1,"multiplier":0.837,"sell_prices":[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1,1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8,1.9,2,2.1]},"verified":false,"contains":["\"code\":\"invalid_arguments\"","sell_prices must not exceed 20"]},
+  {"id":"calc-015","tool":"calculate_profit","arguments":{"item_name":"Quantity Above Bound","buy_price":0.48,"quantity":100001,"multiplier":0.837,"sell_prices":[0.8]},"verified":false,"contains":["\"code\":\"invalid_arguments\"","quantity must not exceed 100000"]},
+  {"id":"calc-016","tool":"calculate_profit","arguments":{"item_name":"Negative Sell","buy_price":0.48,"quantity":1,"multiplier":0.837,"sell_prices":[-0.8]},"verified":false,"contains":["\"code\":\"validation_error\"","sell price"]},
+  {"id":"calc-017","tool":"calculate_profit","arguments":{"item_name":"   ","buy_price":0.48,"quantity":1,"multiplier":0.837,"sell_prices":[0.8]},"verified":false,"contains":["\"code\":\"validation_error\"","item name"]},
+  {"id":"calc-018","tool":"calculate_profit","arguments":{"item_name":"Zero Multiplier","buy_price":0.48,"quantity":1,"multiplier":0,"sell_prices":[0.8]},"verified":false,"contains":["\"code\":\"validation_error\"","multiplier"]},
+  {"id":"calc-019","tool":"calculate_profit","arguments":{"item_name":"Zero Sell","buy_price":0.48,"quantity":1,"multiplier":0.837,"sell_prices":[0]},"verified":false,"contains":["\"code\":\"validation_error\"","sell price"]},
+  {"id":"calc-020","tool":"calculate_profit","arguments":{"item_name":"Quantity Boundary","buy_price":0.48,"quantity":100000,"multiplier":0.837,"sell_prices":[0.8]},"verified":true,"contains":["\"quantity\":100000","\"fee\":\"0.837\""]},
+
+  {"id":"reverse-011","tool":"solve_target","arguments":{"item_name":"Missing Sell","solve_direction":"buy","buy_price":null,"sell_price":null,"quantity":1,"multiplier":0.8,"target_net_profit":0.2,"target_total_profit":null,"target_knife_ratio":null},"verified":false,"contains":["\"code\":\"validation_error\"","sell price"]},
+  {"id":"reverse-012","tool":"solve_target","arguments":{"item_name":"Zero Ratio","solve_direction":"sell","buy_price":0.5,"sell_price":null,"quantity":1,"multiplier":0.8,"target_net_profit":null,"target_total_profit":null,"target_knife_ratio":0},"verified":false,"contains":["\"code\":\"validation_error\"","target knife ratio"]},
+  {"id":"reverse-013","tool":"solve_target","arguments":{"item_name":"Zero Quantity","solve_direction":"sell","buy_price":0.5,"sell_price":null,"quantity":0,"multiplier":0.8,"target_net_profit":0.2,"target_total_profit":null,"target_knife_ratio":null},"verified":false,"contains":["\"code\":\"validation_error\"","quantity"]},
+  {"id":"reverse-014","tool":"solve_target","arguments":{"item_name":"Zero Multiplier","solve_direction":"sell","buy_price":0.5,"sell_price":null,"quantity":1,"multiplier":0,"target_net_profit":0.2,"target_total_profit":null,"target_knife_ratio":null},"verified":false,"contains":["\"code\":\"validation_error\"","multiplier"]},
+  {"id":"reverse-015","tool":"solve_target","arguments":{"item_name":"Nonpositive Solved Buy","solve_direction":"buy","buy_price":null,"sell_price":1,"quantity":1,"multiplier":0.8,"target_net_profit":0.9,"target_total_profit":null,"target_knife_ratio":null},"verified":false,"contains":["\"code\":\"validation_error\"","solved buy price"]},
+  {"id":"reverse-016","tool":"solve_target","arguments":{"item_name":" ","solve_direction":"sell","buy_price":0.5,"sell_price":null,"quantity":1,"multiplier":0.8,"target_net_profit":0.2,"target_total_profit":null,"target_knife_ratio":null},"verified":false,"contains":["\"code\":\"validation_error\"","item name"]},
+
+  {"id":"lookup-009","tool":"lookup_items","arguments":{"query":"Boundary","limit":10},"verified":true,"contains":["Boundary | Verified","\"sell_listings\":20"]},
+  {"id":"lookup-010","tool":"lookup_items","arguments":{"query":"Missing Limit"},"verified":false,"contains":["\"code\":\"invalid_arguments\"","between 1 and 10"]},
+  {"id":"lookup-011","tool":"lookup_items","arguments":{"query":"Negative Limit","limit":-1},"verified":false,"contains":["\"code\":\"invalid_arguments\"","between 1 and 10"]},
+  {"id":"lookup-012","tool":"lookup_items","arguments":{"query":"Unknown Field","limit":1,"extra":true},"verified":false,"contains":["\"code\":\"invalid_arguments\"","unknown field"]},
+  {"id":"lookup-013","tool":"lookup_items","arguments":"not-an-object","verified":false,"contains":["\"code\":\"invalid_arguments\""]},
+  {"id":"lookup-014","tool":"not_allowed","arguments":{},"verified":false,"contains":["\"code\":\"unknown_tool\"","unsupported tool"]}
 ]

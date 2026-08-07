@@ -1,0 +1,14 @@
+[
+  {"id":"semantic-calc-compare","message":"0.48 买入 Capsule 共 5 件，净倍率 0.837，分别在 0.70 和 0.80 卖出，比较总收益。","expected_tools":["calculate_profit"],"require_grounded":true,"max_elapsed_ms":25000,"max_total_tokens":2500},
+  {"id":"semantic-calc-loss","message":"Item X 买入价 1，数量 3，净倍率 0.8，卖出价 0.9，请用可信计算说明结果。","expected_tools":["calculate_profit"],"require_grounded":true,"max_elapsed_ms":25000,"max_total_tokens":2500},
+  {"id":"semantic-reverse-total","message":"Capsule 买入价 0.48，数量 2，净倍率 0.85，目标总收益 0.40，需要卖多少钱？","expected_tools":["solve_target"],"require_grounded":true,"max_elapsed_ms":25000,"max_total_tokens":2500},
+  {"id":"semantic-reverse-ratio","message":"已知卖价 1、数量 1、净倍率 0.8，目标挂刀比例 0.625，请反推 Item Y 的买价。","expected_tools":["solve_target"],"require_grounded":true,"max_elapsed_ms":25000,"max_total_tokens":2500},
+  {"id":"semantic-lookup","message":"查询 AK-47 Redline 的 Steam 市场摘要，返回 3 个候选。","expected_tools":["lookup_items"],"require_grounded":true,"max_elapsed_ms":25000,"max_total_tokens":2500},
+  {"id":"semantic-follow-up","message":"把数量改为 10，并重新计算，不能沿用上一轮数字。","history":[{"role":"user","content":"0.48 买入 Capsule 共 5 件，净倍率 0.837，在 0.80 卖出。"},{"role":"assistant","content":"上一轮结果已经通过工具验证。"}],"expected_tools":["calculate_profit"],"require_grounded":true,"max_elapsed_ms":25000,"max_total_tokens":3000},
+  {"id":"semantic-multiple-exits","message":"Multi Exit 买入价 1.2、数量 2、净倍率 0.85，比较卖价 1.4、1.6、1.8。","expected_tools":["calculate_profit"],"require_grounded":true,"max_elapsed_ms":25000,"max_total_tokens":2500},
+  {"id":"semantic-solve-buy","message":"Item Z 卖价 1、数量 2、净倍率 0.8、目标总收益 0.6，反推买价。","expected_tools":["solve_target"],"require_grounded":true,"max_elapsed_ms":25000,"max_total_tokens":2500},
+  {"id":"semantic-lookup-missing","message":"查询关键词 missing 的市场摘要，返回 3 个候选；若工具无结果就明确说明。","expected_tools":["lookup_items"],"require_grounded":false,"max_elapsed_ms":25000,"max_total_tokens":2500},
+  {"id":"semantic-lookup-failure","message":"查询关键词 provider-down 的市场摘要，返回 3 个候选；工具失败时不要编造。","expected_tools":["lookup_items"],"require_grounded":false,"max_elapsed_ms":25000,"max_total_tokens":2500},
+  {"id":"semantic-quantity-boundary","message":"Boundary 买入价 0.48、数量 100000、净倍率 0.837、卖价 0.8，请调用工具计算。","expected_tools":["calculate_profit"],"require_grounded":true,"max_elapsed_ms":25000,"max_total_tokens":2500},
+  {"id":"semantic-reverse-net","message":"Target Item 买入价 0.5、数量 1、净倍率 0.8，目标单件净收益 0.3，反推卖价。","expected_tools":["solve_target"],"require_grounded":true,"max_elapsed_ms":25000,"max_total_tokens":2500}
+]

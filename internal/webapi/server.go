@@ -50,8 +50,9 @@ type HandlerOptions struct {
 }
 
 type apiError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code      string `json:"code"`
+	Message   string `json:"message"`
+	Retryable bool   `json:"retryable,omitempty"`
 }
 
 type errorEnvelope struct {
@@ -67,7 +68,8 @@ type healthResponse struct {
 }
 
 type assistantRequest struct {
-	Message string `json:"message"`
+	Message string                          `json:"message"`
+	History []assistant.ConversationMessage `json:"history,omitempty"`
 }
 
 type calculationRequest struct {
@@ -222,6 +224,10 @@ func (s *server) handleAssistantStream(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusUnprocessableEntity, "validation_error", err.Error())
 		return
 	}
+	if _, err := assistant.ValidateHistory(request.History); err != nil {
+		writeAPIError(w, http.StatusUnprocessableEntity, "validation_error", err.Error())
+		return
+	}
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -236,7 +242,7 @@ func (s *server) handleAssistantStream(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
 	s.metrics.AssistantStarted()
-	err := s.assistant.Run(ctx, request.Message, func(event assistant.Event) error {
+	err := s.assistant.RunConversation(ctx, request.Message, request.History, func(event assistant.Event) error {
 		if event.Completion != nil {
 			s.metrics.ObserveAssistantCompletion(observability.AssistantCompletion{
 				ElapsedMS:    event.Completion.ElapsedMS,
@@ -257,7 +263,7 @@ func (s *server) handleAssistantStream(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil && !errors.Is(err, context.Canceled) {
 		_ = writeSSE(w, "error", map[string]any{
-			"error": apiError{Code: "assistant_error", Message: "AI 策略助手暂时无法完成请求"},
+			"error": apiError{Code: "assistant_error", Message: "AI 策略助手暂时无法完成请求", Retryable: true},
 		})
 		flusher.Flush()
 	}

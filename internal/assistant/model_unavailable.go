@@ -22,6 +22,7 @@ func NewUnavailableModel(provider, model, reason string) Model {
 		Provider:      provider,
 		Model:         model,
 		PromptVersion: PromptVersion,
+		MaxHistory:    maxHistoryMessages,
 		Reason:        reason,
 	}}
 }

@@ -2,7 +2,30 @@
 
 All notable demonstrable milestones are recorded here. Until the public-operation requirements are complete, each version is published as a GitHub Pre-release with an immutable annotated tag.
 
-## [v0.4.0] - Unreleased
+## [v0.5.0] - Unreleased
+
+### Added
+
+- Typed OpenAI Responses streaming for text and function-call arguments with bounded parsing.
+- Up to six validated page-local prior messages while keeping conversations out of persistence and logs.
+- Accessible Stop and explicit Retry controls with HTTP-context cancellation and no automatic paid retry.
+- Fifty deterministic tool cases plus a 12-case semantic suite and content-free JSON report engine.
+- Opt-in current/baseline prompt evaluation with latency, token, grounding, tool-selection, and caller-priced cost thresholds.
+- Two Chromium workflows for transient context/retry and cancellation without calculation-history side effects.
+
+### Changed
+
+- Prompt `steam-profit-assistant-v1.1.0` treats prior conversation as untrusted context and requires fresh current-turn evidence for all market or calculated values.
+- Grounded provider text is emitted with its original native delta boundaries only after whole-answer validation; unsafe partial model text is never exposed.
+- `make build` now also produces the opt-in `steam-profit-eval` binary.
+
+### Compatibility
+
+- Existing `message`-only assistant requests remain valid; the optional `history` array is additive and transient.
+- CLI commands, calculation APIs and formulas, CSV schemas, SQLite schema, and deterministic provider-disabled workflows remain unchanged.
+- Live semantic evaluation is never part of normal CI and requires an explicit `--live` flag plus replaceable environment credentials.
+
+## [v0.4.0] - 2026-08-06
 
 ### Added
 
@@ -66,5 +89,6 @@ All notable demonstrable milestones are recorded here. Until the public-operatio
 - The milestone is local, single-user, and does not require a model provider.
 
 [v0.3.0]: https://github.com/NoireOffical/steam-profit-calculator/releases/tag/v0.3.0
+[v0.4.0]: https://github.com/NoireOffical/steam-profit-calculator/releases/tag/v0.4.0
 [v0.2.0]: https://github.com/NoireOffical/steam-profit-calculator/releases/tag/v0.2.0
 [v0.1.0]: https://github.com/NoireOffical/steam-profit-calculator/releases/tag/v0.1.0

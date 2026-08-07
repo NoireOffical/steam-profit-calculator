@@ -602,6 +602,27 @@ a {
   font-size: 11px;
 }
 
+.assistant-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.assistant-actions button {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 11px;
+}
+
+.assistant-actions button[hidden] {
+  display: none;
+}
+
+.assistant-actions .stop-button {
+  border-color: rgba(255, 143, 120, 0.35);
+  color: var(--negative);
+}
+
 .workspace {
   grid-template-columns: 0.92fr 1.08fr;
 }

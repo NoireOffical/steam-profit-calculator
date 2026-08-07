@@ -11,6 +11,9 @@ type Status struct {
 	Provider        string `json:"provider"`
 	Model           string `json:"model,omitempty"`
 	PromptVersion   string `json:"prompt_version"`
+	NativeStreaming bool   `json:"native_streaming"`
+	RetrySupported  bool   `json:"retry_supported"`
+	MaxHistory      int    `json:"max_history_messages"`
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 	Verbosity       string `json:"verbosity,omitempty"`
 	MaxOutputTokens int    `json:"max_output_tokens,omitempty"`
@@ -46,10 +49,18 @@ type ToolOutput struct {
 	Output string
 }
 
+// ConversationMessage is one bounded, transient prior browser message.
+// It is untrusted context and never counts as current-turn tool evidence.
+type ConversationMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
 // ModelRequest contains one turn in a bounded model/tool loop.
 type ModelRequest struct {
 	Instructions string
 	Message      string
+	History      []ConversationMessage
 	Tools        []ToolDefinition
 	State        any
 	ToolOutputs  []ToolOutput
@@ -57,12 +68,14 @@ type ModelRequest struct {
 
 // ModelResponse is the provider-neutral result of one model turn.
 type ModelResponse struct {
-	State     any
-	Text      string
-	ToolCalls []ToolCall
-	RequestID string
-	Model     string
-	Usage     Usage
+	State           any
+	Text            string
+	TextDeltas      []string
+	NativeStreaming bool
+	ToolCalls       []ToolCall
+	RequestID       string
+	Model           string
+	Usage           Usage
 }
 
 // Model is the replaceable model-provider boundary used by the assistant.
@@ -89,6 +102,7 @@ type Completion struct {
 	Verbosity       string `json:"verbosity,omitempty"`
 	MaxOutputTokens int    `json:"max_output_tokens,omitempty"`
 	RequestID       string `json:"request_id,omitempty"`
+	NativeStreaming bool   `json:"native_streaming"`
 	Grounded        bool   `json:"grounded"`
 	GroundingNote   string `json:"grounding_note,omitempty"`
 	ToolCount       int    `json:"tool_count"`

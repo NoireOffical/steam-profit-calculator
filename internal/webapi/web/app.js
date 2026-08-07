@@ -31,6 +31,8 @@ const elements = {
   assistantForm: document.querySelector("#assistant-form"),
   assistantInput: document.querySelector("#assistant-input"),
   assistantSubmit: document.querySelector("#assistant-submit"),
+  assistantStop: document.querySelector("#assistant-stop"),
+  assistantRetry: document.querySelector("#assistant-retry"),
   assistantFormHint: document.querySelector("#assistant-form-hint"),
 };
 
@@ -54,6 +56,14 @@ const historyState = {
   offset: 0,
   total: 0,
   limit: 20,
+};
+
+const assistantState = {
+  history: [],
+  maxHistory: 6,
+  controller: undefined,
+  retry: undefined,
+  available: false,
 };
 
 async function requestJSON(path, options = {}) {
@@ -252,6 +262,8 @@ async function checkHealth() {
 }
 
 function setAssistantAvailability(status) {
+  assistantState.available = Boolean(status.available);
+  assistantState.maxHistory = Number(status.max_history_messages) || 6;
   elements.assistantStatus.classList.toggle("available", status.available);
   elements.assistantStatus.classList.toggle("unavailable", !status.available);
   const statusText = elements.assistantStatus.querySelector("span:last-child");
@@ -259,12 +271,14 @@ function setAssistantAvailability(status) {
     statusText.textContent = `${status.provider} · ${status.model}`;
     elements.assistantInput.disabled = false;
     elements.assistantSubmit.disabled = false;
-    elements.assistantFormHint.textContent = `提示词版本 ${status.prompt_version}`;
+    elements.assistantFormHint.textContent = `提示词 ${status.prompt_version}${status.native_streaming ? " · 原生流安全缓冲" : ""}`;
     return;
   }
   statusText.textContent = status.reason || "AI 策略助手未启用";
   elements.assistantInput.disabled = true;
   elements.assistantSubmit.disabled = true;
+  elements.assistantStop.hidden = true;
+  elements.assistantRetry.hidden = true;
   elements.assistantFormHint.textContent = "现有查询和确定性计算仍可正常使用";
 }
 
@@ -352,7 +366,8 @@ function renderCompletion(completion) {
   const tokenText = completion.usage?.total_tokens
     ? ` · ${completion.usage.total_tokens} tokens`
     : "";
-  meta.textContent = `${completion.grounded ? "数值溯源通过" : "已启用安全替代"} · ${completion.tool_count} 次工具 · ${completion.elapsed_ms} ms${tokenText}`;
+  const streamText = completion.native_streaming ? " · Provider 原生流" : "";
+  meta.textContent = `${completion.grounded ? "数值溯源通过" : "已启用安全替代"} · ${completion.tool_count} 次工具 · ${completion.elapsed_ms} ms${tokenText}${streamText}`;
   elements.assistantMessages.append(meta);
 }
 
@@ -372,11 +387,12 @@ function parseSSEBlock(block) {
   return { eventName, payload: JSON.parse(data.join("\n")) };
 }
 
-async function streamAssistant(message, onEvent) {
+async function streamAssistant(message, history, signal, onEvent) {
   const response = await fetch("/api/v1/assistant/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, history }),
+    signal,
   });
   if (!response.ok) {
     throw new Error(await readErrorResponse(response));
@@ -404,6 +420,89 @@ async function streamAssistant(message, onEvent) {
     if (done) {
       break;
     }
+  }
+}
+
+function boundedAssistantHistory(history) {
+  return history.slice(-assistantState.maxHistory).map((message) => ({ ...message }));
+}
+
+function setAssistantBusy(busy) {
+  elements.assistantInput.disabled = busy || !assistantState.available;
+  setButtonBusy(elements.assistantSubmit, busy, "分析中");
+  elements.assistantSubmit.disabled = busy || !assistantState.available;
+  elements.assistantStop.hidden = !busy;
+}
+
+function rememberAssistantTurn(userText, assistantText) {
+  assistantState.history = boundedAssistantHistory([
+    ...assistantState.history,
+    { role: "user", content: userText },
+    { role: "assistant", content: assistantText },
+  ]);
+}
+
+async function runAssistantTurn(message, history) {
+  const priorHistory = boundedAssistantHistory(history);
+  appendChatMessage("user", message);
+  const assistantMessage = appendChatMessage("assistant", "");
+  assistantMessage.message.classList.add("streaming");
+  assistantMessage.copy.textContent = "正在连接策略模型…";
+  elements.assistantEvidence.replaceChildren();
+  elements.assistantInput.value = "";
+  elements.assistantRetry.hidden = true;
+  assistantState.retry = undefined;
+  assistantState.controller = new AbortController();
+  setAssistantBusy(true);
+  let hasDelta = false;
+  let completed = false;
+  let toolProgress;
+
+  try {
+    await streamAssistant(message, priorHistory, assistantState.controller.signal, (eventName, payload) => {
+      if (eventName === "status") {
+        assistantMessage.copy.textContent = payload.message;
+      } else if (eventName === "tool_start") {
+        toolProgress?.remove();
+        toolProgress = appendToolProgress(payload.tool);
+      } else if (eventName === "evidence") {
+        toolProgress?.remove();
+        toolProgress = undefined;
+        appendEvidence(payload.evidence);
+        assistantMessage.copy.textContent = "正在验证完整回答与工具依据…";
+      } else if (eventName === "delta") {
+        if (!hasDelta) {
+          assistantMessage.copy.textContent = "";
+          hasDelta = true;
+        }
+        assistantMessage.copy.textContent += payload.text;
+      } else if (eventName === "done") {
+        completed = true;
+        renderCompletion(payload.completion);
+      } else if (eventName === "error") {
+        const streamError = new Error(payload?.error?.message || "AI 策略助手暂时不可用");
+        streamError.retryable = Boolean(payload?.error?.retryable);
+        throw streamError;
+      }
+    });
+    if (!completed) {
+      throw new Error("AI 策略助手未完成本次请求");
+    }
+    rememberAssistantTurn(message, assistantMessage.copy.textContent);
+  } catch (error) {
+    toolProgress?.remove();
+    assistantMessage.message.classList.add("error-message");
+    const cancelled = error.name === "AbortError";
+    assistantMessage.copy.textContent = cancelled ? "请求已停止，未保存对话或计算记录。" : error.message;
+    if (cancelled || error.retryable || error instanceof TypeError) {
+      assistantState.retry = { message, history: priorHistory };
+      elements.assistantRetry.hidden = false;
+    }
+  } finally {
+    assistantMessage.message.classList.remove("streaming");
+    assistantState.controller = undefined;
+    setAssistantBusy(false);
+    elements.assistantInput.focus();
   }
 }
 
@@ -535,51 +634,19 @@ elements.assistantForm.addEventListener("submit", async (event) => {
     return;
   }
 
-  appendChatMessage("user", message);
-  const assistantMessage = appendChatMessage("assistant", "");
-  assistantMessage.message.classList.add("streaming");
-  assistantMessage.copy.textContent = "正在连接策略模型…";
-  elements.assistantEvidence.replaceChildren();
-  elements.assistantInput.value = "";
-  setButtonBusy(elements.assistantSubmit, true, "分析中");
-  elements.assistantInput.disabled = true;
-  let hasDelta = false;
-  let toolProgress;
+  await runAssistantTurn(message, assistantState.history);
+});
 
-  try {
-    await streamAssistant(message, (eventName, payload) => {
-      if (eventName === "status") {
-        assistantMessage.copy.textContent = payload.message;
-      } else if (eventName === "tool_start") {
-        toolProgress?.remove();
-        toolProgress = appendToolProgress(payload.tool);
-      } else if (eventName === "evidence") {
-        toolProgress?.remove();
-        toolProgress = undefined;
-        appendEvidence(payload.evidence);
-        assistantMessage.copy.textContent = "正在依据工具结果组织回答…";
-      } else if (eventName === "delta") {
-        if (!hasDelta) {
-          assistantMessage.copy.textContent = "";
-          hasDelta = true;
-        }
-        assistantMessage.copy.textContent += payload.text;
-      } else if (eventName === "done") {
-        renderCompletion(payload.completion);
-      } else if (eventName === "error") {
-        throw new Error(payload?.error?.message || "AI 策略助手暂时不可用");
-      }
-    });
-  } catch (error) {
-    toolProgress?.remove();
-    assistantMessage.message.classList.add("error-message");
-    assistantMessage.copy.textContent = error.message;
-  } finally {
-    assistantMessage.message.classList.remove("streaming");
-    elements.assistantInput.disabled = false;
-    setButtonBusy(elements.assistantSubmit, false, "");
-    elements.assistantInput.focus();
+elements.assistantStop.addEventListener("click", () => {
+  assistantState.controller?.abort();
+});
+
+elements.assistantRetry.addEventListener("click", async () => {
+  const retry = assistantState.retry;
+  if (!retry || assistantState.controller) {
+    return;
   }
+  await runAssistantTurn(retry.message, retry.history);
 });
 
 renderLookupTable([]);

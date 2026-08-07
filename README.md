@@ -14,13 +14,14 @@ The project keeps its formulas, storage schema, provider behavior, and error han
 
 - A same-origin browser workbench and versioned JSON API
 - An optional AI strategy assistant with strict read-only lookup, calculation, and reverse tools
-- SSE progress, structured evidence, answer chunks, and model-usage metadata
+- Typed Responses API streaming, SSE progress, structured evidence, and model-usage metadata
 - A numeric grounding guard that suppresses uncited or unsupported model numbers
-- A 30-case deterministic evaluation baseline that requires no live model credential
+- Six-message page-local conversation context with explicit Stop and Retry controls
+- A 50-case deterministic baseline plus a 12-case opt-in semantic evaluation suite and JSON reports
 - Versioned SQLite web persistence with durable record IDs and UTC timestamps
 - Server-side item/outcome filters, stable ordering, and bounded history pagination
 - Explicit, idempotent CSV-to-SQLite import plus a legacy CSV rollback mode
-- Four isolated Playwright Chromium workflows covering persistence, pagination, validation, and AI-disabled fallback
+- Six isolated Playwright Chromium workflows covering persistence, pagination, validation, AI-disabled fallback, transient context/retry, and cancellation
 - A non-root Docker Compose demo with deterministic seed data, a named SQLite volume, and health checks
 - Request IDs, content-free structured request logs, and aggregate request/assistant metrics
 - Five compatible CLI commands: `lookup`, `add`, `reverse`, `import`, and `list`
@@ -168,7 +169,7 @@ The source CSV is never modified. Existing source rows are skipped on repeat imp
 
 Every HTTP response includes an `X-Request-ID`. Request logs contain method, path, status, duration, and request ID only; aggregate metrics omit query strings, bodies, prompts, model output, market data, credentials, and record values.
 
-This remains a local, single-user application. Assistant requests are stateless and are not persisted. Authentication, rate limiting, live-model evaluation, managed backups, persistent telemetry, and public TLS are required before public deployment.
+This remains a local, single-user application. The browser may send at most six page-local prior messages, but conversations, provider responses, and tool evidence are never persisted. Authentication, rate limiting, scheduled live-model evaluation, managed backups, persistent telemetry, and public TLS are required before public deployment.
 
 ## AI strategy assistant
 
@@ -193,9 +194,22 @@ The standard `OPENAI_API_KEY` is also accepted. Keys, models, and settings are e
 | `STEAM_PROFIT_AI_TIMEOUT_MS` | `25000` | Per-model-request timeout |
 | `STEAM_PROFIT_AI_API_KEY` | empty | API key, preferred over `OPENAI_API_KEY` |
 
-The adapter follows OpenAI's official [Responses API function-calling flow](https://developers.openai.com/api/docs/guides/function-calling). `lookup_items`, `calculate_profit`, and `solve_target` are read-only. Every successful tool result gets a `T1`/`T2` evidence ID. Final prose must cite all applicable evidence and may contain only numbers present in tool output; otherwise the server substitutes a safe evidence-directed response.
+The adapter follows OpenAI's official [Responses API function-calling](https://developers.openai.com/api/docs/guides/function-calling) and [typed streaming](https://developers.openai.com/api/docs/guides/streaming-responses) flows. `lookup_items`, `calculate_profit`, and `solve_target` are read-only. Every successful tool result gets a `T1`/`T2` evidence ID. Final prose must cite all applicable evidence and may contain only numbers present in current-turn tool output; otherwise the server substitutes a safe evidence-directed response.
 
-SSE event names are `status`, `tool_start`, `evidence`, `delta`, `done`, and `error`. This milestone chunks the completed provider answer into `delta` events; the stable browser contract can later carry provider-native token deltas.
+SSE event names remain `status`, `tool_start`, `evidence`, `delta`, `done`, and `error`. The provider adapter parses native text and function-argument deltas, but the service buffers the complete answer until grounding passes. A valid answer is then released using the provider's original delta boundaries; invalid provider text is never exposed. The optional request `history` field accepts at most six `user` or `assistant` messages and remains transient.
+
+### AI quality evaluation
+
+Normal tests execute exactly 50 deterministic tool cases and scripted report tests without Steam or OpenAI network calls. Live semantic evaluation is always explicit and uses a deterministic lookup fixture:
+
+```bash
+export STEAM_PROFIT_AI_PROVIDER=openai
+export STEAM_PROFIT_AI_API_KEY="temporary-key"
+make ai-eval
+make ai-eval-baseline
+```
+
+The current-prompt report is written to `.build/evaluations/report.json`; the retained baseline writes `.build/evaluations/baseline-report.json`. Reports contain case IDs, prompt/model versions, observed tools, grounding, latency, token usage, threshold failures, and optional cost estimates. They omit credentials, prompt text, model prose, and tool values. Cost is calculated only when the caller supplies rates such as `--input-usd-per-million` and `--output-usd-per-million`; the project does not hard-code provider prices.
 
 ## Commands
 
@@ -339,6 +353,7 @@ The web SQLite schema stores the same canonical values as scaled integers, plus 
 ```text
 cmd/steam-profit/        CLI entry point
 cmd/steam-profit-server/ Web server entry point
+cmd/steam-profit-eval/   Opt-in live semantic evaluation entry point
 internal/calculation/    Forward and reverse formulas
 internal/cli/            Command parsing and orchestration
 internal/display/        Table and CSV rendering
@@ -346,6 +361,7 @@ internal/domain/         Requests, records, and field schemas
 internal/importer/       Atomic batch parsing
 internal/lookup/         Provider configuration and HTTP client
 internal/assistant/      Model provider, read-only tools, grounding, and evaluations
+internal/evaluation/     Versioned semantic suite and content-free reports
 internal/observability/ Request correlation, safe logs, and aggregate metrics
 internal/storage/        SQLite repository, CSV compatibility, and migration
 internal/webapi/         JSON API and embedded browser application

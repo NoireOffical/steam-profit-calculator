@@ -116,6 +116,103 @@ func TestServiceReturnsProviderFailure(t *testing.T) {
 	}
 }
 
+func TestServicePreservesNativeDeltasAfterGrounding(t *testing.T) {
+	model := &scriptedModel{
+		status: Status{Available: true, Provider: "fake", Model: "fake-1", PromptVersion: PromptVersion, NativeStreaming: true},
+		responses: []ModelResponse{
+			{State: "turn-1", ToolCalls: []ToolCall{{CallID: "call-1", Name: toolCalculateProfit, Arguments: `{"item_name":"Capsule","buy_price":0.48,"quantity":1,"multiplier":0.837,"sell_prices":[0.8]}`}}},
+			{Text: "结果见 [T1]。", TextDeltas: []string{"结果", "见 ", "[T1]。"}, NativeStreaming: true},
+		},
+	}
+	service := newAssistantService(t, model)
+	var deltas []string
+	var completion *Completion
+	if err := service.Run(context.Background(), "计算", func(event Event) error {
+		if event.Type == "delta" {
+			deltas = append(deltas, event.Text)
+		}
+		if event.Completion != nil {
+			completion = event.Completion
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if strings.Join(deltas, "|") != "结果|见 |[T1]。" || completion == nil || !completion.NativeStreaming {
+		t.Fatalf("deltas/completion = %#v / %#v", deltas, completion)
+	}
+}
+
+func TestServiceDoesNotExposeUngroundedNativeDeltas(t *testing.T) {
+	model := &scriptedModel{
+		status: Status{Available: true, Provider: "fake", PromptVersion: PromptVersion, NativeStreaming: true},
+		responses: []ModelResponse{
+			{State: "turn-1", ToolCalls: []ToolCall{{CallID: "call-1", Name: toolCalculateProfit, Arguments: `{"item_name":"Capsule","buy_price":0.48,"quantity":1,"multiplier":0.837,"sell_prices":[0.8]}`}}},
+			{Text: "凭空声称 99.9 [T1]。", TextDeltas: []string{"凭空声称 ", "99.9 ", "[T1]。"}, NativeStreaming: true},
+		},
+	}
+	service := newAssistantService(t, model)
+	var answer strings.Builder
+	if err := service.Run(context.Background(), "计算", func(event Event) error {
+		if event.Type == "delta" {
+			answer.WriteString(event.Text)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if strings.Contains(answer.String(), "99.9") || !strings.Contains(answer.String(), "未通过数值溯源") {
+		t.Fatalf("answer = %q", answer.String())
+	}
+}
+
+func TestServiceValidatesAndPassesTransientHistory(t *testing.T) {
+	model := &scriptedModel{
+		status:    Status{Available: true, Provider: "fake", PromptVersion: PromptVersion},
+		responses: []ModelResponse{{Text: "可以继续，但不使用历史数字。"}},
+	}
+	service := newAssistantService(t, model)
+	history := []ConversationMessage{{Role: " user ", Content: " previous question "}, {Role: "assistant", Content: "previous answer"}}
+	if err := service.RunConversation(context.Background(), "follow up", history, nil); err != nil {
+		t.Fatalf("RunConversation() error = %v", err)
+	}
+	if len(model.requests) != 1 || len(model.requests[0].History) != 2 || model.requests[0].History[0].Role != "user" || model.requests[0].History[0].Content != "previous question" {
+		t.Fatalf("model history = %#v", model.requests)
+	}
+
+	tooMany := make([]ConversationMessage, maxHistoryMessages+1)
+	for index := range tooMany {
+		tooMany[index] = ConversationMessage{Role: "user", Content: "message"}
+	}
+	if err := service.RunConversation(context.Background(), "follow up", tooMany, nil); !errors.Is(err, ErrInvalidHistory) {
+		t.Fatalf("invalid history error = %v", err)
+	}
+	if len(model.requests) != 1 {
+		t.Fatalf("model requests after invalid history = %d, want 1", len(model.requests))
+	}
+}
+
+type cancellingModel struct{}
+
+func (cancellingModel) Status() Status {
+	return Status{Available: true, Provider: "blocking", PromptVersion: PromptVersion}
+}
+
+func (cancellingModel) Respond(ctx context.Context, _ ModelRequest) (ModelResponse, error) {
+	<-ctx.Done()
+	return ModelResponse{}, ctx.Err()
+}
+
+func TestServicePropagatesCancellation(t *testing.T) {
+	service := newAssistantService(t, cancellingModel{})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := service.Run(ctx, "cancel this", nil)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run() error = %v, want context cancellation", err)
+	}
+}
+
 func TestServiceRejectsUnavailableAndInvalidMessages(t *testing.T) {
 	service := newAssistantService(t, &scriptedModel{status: Status{Available: false, Provider: "disabled"}})
 	if err := service.Run(context.Background(), "", nil); !errors.Is(err, ErrInvalidMessage) {

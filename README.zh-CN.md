@@ -14,13 +14,14 @@ Steam Profit Calculator 是一个使用 Go 编写的 Steam Community Market 收�
 
 - 提供同源浏览器工作台和版本化 JSON API；
 - 提供可选的 AI 策略助手，通过严格工具调用查询、计算和反推，不让模型自行计算；
-- 通过 SSE 渐进展示工具进度、结构化依据、回答和模型用量；
+- 解析 Responses API 原生类型化流，并通过 SSE 展示工具进度、结构化依据、回答和模型用量；
 - 对模型回答执行数值溯源校验，无引用或工具结果中不存在的数字会被安全替换；
-- 提供 30 条无需真实模型密钥的固定评测基线；
+- 提供最多 6 条页面内临时上下文，以及显式停止和重试控制；
+- 提供 50 条无需真实模型密钥的固定基线、12 条可选语义套件和 JSON 评测报告；
 - Web 默认使用版本化 SQLite，记录具有稳定 ID 和 UTC 创建时间；
 - 历史记录支持服务端商品/收益筛选、稳定排序和有界分页；
 - 支持显式、幂等的 CSV 到 SQLite 导入，并保留 CSV 回滚模式；
-- 提供四条隔离的 Playwright Chromium 流程，覆盖持久化、分页、输入错误和 AI 关闭降级；
+- 提供六条隔离的 Playwright Chromium 流程，覆盖持久化、分页、输入错误、AI 关闭降级、临时上下文/重试和取消；
 - 提供非 root Docker Compose 演示、固定种子数据、SQLite 命名卷和健康检查；
 - 每个请求具有关联 ID，并提供不记录用户内容的结构化日志与请求/助手聚合指标；
 - 保留 `lookup`、`add`、`reverse`、`import`、`list` 五个独立 CLI 命令；
@@ -168,7 +169,7 @@ Web 默认使用 SQLite。可以显式导入历史兼容 CSV，同一文件重�
 
 每个 HTTP 响应都包含 `X-Request-ID`。请求日志只记录方法、路径、状态、耗时和关联 ID；聚合指标不记录查询字符串、请求体、Prompt、模型回答、市场数据、密钥或历史记录值。
 
-当前 Web 版本仍面向本地单用户实践。AI 对话无状态且不落盘；公开部署前仍需完成身份认证、限流、真实模型评测、托管备份、持久化监控和公网 TLS。
+当前 Web 版本仍面向本地单用户实践。浏览器最多发送 6 条页面内历史，但对话、Provider 响应和工具依据都不落盘；公开部署前仍需完成身份认证、限流、定时真实模型评测、托管备份、持久化监控和公网 TLS。
 
 ## AI 策略助手
 
@@ -193,13 +194,26 @@ make run-web
 | `STEAM_PROFIT_AI_TIMEOUT_MS` | `25000` | 单次模型请求超时 |
 | `STEAM_PROFIT_AI_API_KEY` | 空 | OpenAI API 密钥，优先于 `OPENAI_API_KEY` |
 
-实现遵循 OpenAI 官方的 [Responses API 函数调用流程](https://developers.openai.com/api/docs/guides/function-calling)；三个工具是只读的：
+实现遵循 OpenAI 官方的 [Responses API 函数调用](https://developers.openai.com/api/docs/guides/function-calling)和[类型化流式响应](https://developers.openai.com/api/docs/guides/streaming-responses)流程；三个工具是只读的：
 
 - `lookup_items`：读取带查询时间的市场快照；
 - `calculate_profit`：调用确定性正向计算，不保存记录；
 - `solve_target`：调用确定性反推，不保存记录。
 
-每个成功工具结果都会生成 `T1`、`T2` 形式的依据编号。最终模型文本必须引用相关编号，且其中每个数字都必须存在于工具输出，否则服务端会用安全说明替换模型原文。SSE 事件包括 `status`、`tool_start`、`evidence`、`delta`、`done` 和 `error`。当前 `delta` 是服务端对完整模型回答的分块输出，后续可在不改变浏览器契约的情况下升级为 Provider 原生 token 流。
+每个成功工具结果都会生成 `T1`、`T2` 形式的依据编号。最终模型文本必须引用当前轮相关编号，且其中每个数字都必须存在于当前轮工具输出，否则服务端会用安全说明替换模型原文。SSE 事件仍为 `status`、`tool_start`、`evidence`、`delta`、`done` 和 `error`。Provider 原生文本及函数参数增量会先在服务端聚合；完整回答通过数值溯源后，才按 Provider 原始增量边界发送给浏览器，未通过的原文不会短暂暴露。可选 `history` 字段最多接受 6 条 `user` 或 `assistant` 消息且只存在于当前页面。
+
+### AI 质量评测
+
+普通测试会离线执行 50 条确定性工具用例和脚本化报告测试，不访问 Steam 或 OpenAI。真实模型语义评测必须显式启用，并使用固定查询夹具：
+
+```bash
+export STEAM_PROFIT_AI_PROVIDER=openai
+export STEAM_PROFIT_AI_API_KEY="temporary-key"
+make ai-eval
+make ai-eval-baseline
+```
+
+当前 Prompt 报告写入 `.build/evaluations/report.json`，保留的基线 Prompt 写入 `.build/evaluations/baseline-report.json`。报告包含用例 ID、Prompt/模型版本、实际工具、溯源结果、延迟、Token、阈值失败和可选成本估算，不包含密钥、Prompt 文本、模型原文或工具值。只有调用者显式传入 `--input-usd-per-million` 与 `--output-usd-per-million` 等费率时才估算成本，仓库不内置易过期的价格表。
 
 ## 命令总览
 
@@ -343,6 +357,7 @@ Web SQLite 使用缩放整数保存同一组规范化数值，并增加记录 ID
 ```text
 cmd/steam-profit/        CLI 入口
 cmd/steam-profit-server/ Web 服务入口
+cmd/steam-profit-eval/   可选真实模型语义评测入口
 internal/calculation/    正向计算与反向求解
 internal/cli/            参数解析与工作流编排
 internal/display/        表格和 CSV 输出
@@ -350,6 +365,7 @@ internal/domain/         请求、记录与字段模型
 internal/importer/       原子化批量导入
 internal/lookup/         Provider 配置与 HTTP 客户端
 internal/assistant/      模型 Provider、只读工具、数值溯源和评测
+internal/evaluation/     版本化语义套件与不含用户内容的报告
 internal/observability/ 请求关联、安全日志与聚合指标
 internal/storage/        SQLite 仓储、CSV 兼容与迁移
 internal/webapi/         JSON API 与嵌入式浏览器应用
