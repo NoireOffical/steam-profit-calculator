@@ -10,6 +10,17 @@ The project keeps its formulas, storage schema, provider behavior, and error han
 
 > This project is not affiliated with Valve or Steam. Market data and calculated results are informational estimates, not financial advice.
 
+## Plug-in external capabilities, not runtime prerequisites
+
+Market data and AI are replaceable adapters rather than dependencies of deterministic calculation, SQLite history, or CSV workflows:
+
+- **The website works without external API keys.** Profit calculation, target solving, record persistence, filtering, pagination, and import/export stay local. AI is disabled by default, while lookup defaults to the keyless `steam_public` adapter.
+- **SteamApis is ready when configured.** After the server receives `STEAM_PROFIT_LOOKUP_PROVIDER=steamapis` and an API key, the browser, JSON API, CLI `lookup`, and AI `lookup_items` tool reuse the same normalized lookup boundary. Rotating the key or switching back to `steam_public` requires no UI, command, or data migration.
+- **OpenAI is ready when configured.** Setting `STEAM_PROFIT_AI_PROVIDER=openai` and a server-side API key adds the natural-language assistant. Provider selection, base URL, model, and key remain environment-managed and independently replaceable. A missing or unavailable model disables only the assistant, not the rest of the site.
+- **Several entry points reuse one trusted core.** Browser, JSON API, CLI, and AI tools can invoke lookup and calculation capabilities; providers supply external information, while monetary results still come from the deterministic engine.
+
+Provider selection is explicit and never silently falls back. Configure a valid key before selecting `steamapis`; a runtime data-source outage fails lookup clearly while calculation, target solving, and history remain available.
+
 ## What it demonstrates
 
 - A same-origin browser workbench and versioned JSON API
@@ -30,7 +41,7 @@ The project keeps its formulas, storage schema, provider behavior, and error han
 - Forward calculations for multiple sell prices in one invocation
 - Reverse calculations from target per-item profit, total profit, or knife ratio
 - Configurable quantity and net multiplier, with a default multiplier of `0.837`
-- Steam Community Market public lookup with timeouts, rate-limit retries, and normalized output
+- Steam Community Market public lookup and authenticated SteamApis v2 search with timeouts, rate-limit retries, and normalized output
 - Human-readable tables and machine-readable CSV output
 - Atomic CSV imports: invalid input never produces partial persisted results
 - Backward-compatible loading of legacy record schemas
@@ -51,7 +62,7 @@ flowchart LR
     A --> B{"Workflow"}
     L["CLI commands"] --> B
     B -->|"lookup"| C["Provider configuration"]
-    C --> D["Steam public market client"]
+    C --> D["Replaceable market lookup client"]
     D --> E["Normalized item summaries"]
 
     B -->|"add / reverse"| F["Calculation domain"]
@@ -183,7 +194,7 @@ This remains a local single-user application or a controlled demo for a small re
 
 ## AI strategy assistant
 
-AI is disabled by default, so missing model credentials never prevent the server, deterministic browser workbench, or CLI from running. Enable the OpenAI provider with environment variables:
+The assistant is a plug-in enhancement and is disabled by default, so missing model credentials never prevent the server, deterministic browser workbench, or CLI from running. Enable the OpenAI provider with environment variables:
 
 ```bash
 export STEAM_PROFIT_AI_PROVIDER=openai
@@ -191,7 +202,7 @@ export STEAM_PROFIT_AI_API_KEY="your-api-key"
 make run-web
 ```
 
-The standard `OPENAI_API_KEY` is also accepted. Keys, models, and settings are environment-only and can be replaced later; never commit a real key.
+The standard `OPENAI_API_KEY` is also accepted. Provider selection, base URL, key, model, and settings are environment-only and can be replaced or disabled later without migrating calculation records or changing deterministic tool contracts. Never commit a real key.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -241,7 +252,7 @@ go run ./cmd/steam-profit lookup \
   --limit 5
 ```
 
-The default provider is Steam Community Market's public search endpoint for app ID `730`. Lookup output is a live snapshot and is not written to the profit-record file.
+The default provider remains Steam Community Market's public search endpoint for app ID `730`. Selecting `steamapis` uses one direct SteamApis v2 keyword search without downloading a full catalog or requesting item details. Lookup output is a read-only snapshot and is not written to the profit-record file.
 
 ### Calculate profit
 
@@ -330,17 +341,29 @@ Prices are stored with three decimal places, ratios with six, and explicitly sup
 
 Lookup behavior can be changed through environment variables:
 
+The normalized lookup boundary is shared by browser search, `/api/v1/items`, CLI `lookup`, and the assistant's read-only `lookup_items` tool. Switching providers or rotating a key does not change those entry points or rewrite profit history; an unavailable data source affects lookup only.
+
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `STEAM_PROFIT_LOOKUP_PROVIDER` | `steam_public` | Lookup implementation |
-| `STEAM_PROFIT_LOOKUP_BASE_URL` | `https://steamcommunity.com` | Provider base URL |
+| `STEAM_PROFIT_LOOKUP_PROVIDER` | `steam_public` | Lookup implementation: `steam_public` or `steamapis` |
+| `STEAM_PROFIT_LOOKUP_BASE_URL` | provider-specific | `https://steamcommunity.com` for `steam_public`; `https://marketplaceapi.steamapis.com` for `steamapis` |
 | `STEAM_PROFIT_LOOKUP_APP_ID` | `730` | Steam application ID |
 | `STEAM_PROFIT_LOOKUP_TIMEOUT_MS` | `5000` | Request timeout |
-| `STEAM_PROFIT_LOOKUP_API_KEY` | empty | Optional provider API key |
+| `STEAM_PROFIT_LOOKUP_API_KEY` | empty | Server-side API key required by `steamapis` |
 | `STEAM_PROFIT_LOOKUP_API_KEY_HEADER` | `X-API-Key` | API-key header |
 | `STEAM_PROFIT_LOOKUP_USER_AGENT` | `steam-profit-calculator/lookup` | HTTP user agent |
 
 Secrets should be supplied through the environment. Local `.env` files are ignored and must not be committed.
+
+Use the direct SteamApis search path with:
+
+```bash
+export STEAM_PROFIT_LOOKUP_PROVIDER=steamapis
+export STEAM_PROFIT_LOOKUP_API_KEY="your-steamapis-key"
+go run ./cmd/steam-profit lookup --query "AK-47 Redline" --limit 5
+```
+
+SteamApis search results can come from third-party marketplaces such as Buff163 or Skinport. The compatible `sell_price_text` includes that source, for example `$45.99 (Buff163)`, while `sale_price_text` remains empty because the lightweight search response has no separate recent-sale value. Treat the result as a provider snapshot, not an official Steam quote.
 
 ## Record schema
 

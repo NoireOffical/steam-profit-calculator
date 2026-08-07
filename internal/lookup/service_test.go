@@ -12,9 +12,13 @@ import (
 type stubClient struct {
 	items []domain.ItemSummary
 	err   error
+	calls *int
 }
 
 func (s stubClient) Lookup(context.Context, domain.ItemLookupRequest) ([]domain.ItemSummary, error) {
+	if s.calls != nil {
+		(*s.calls)++
+	}
 	return s.items, s.err
 }
 
@@ -63,5 +67,18 @@ func TestServiceLookupRejectsInvalidLimit(t *testing.T) {
 	}
 	if err.Error() != "lookup limit must be greater than 0" {
 		t.Fatalf("Lookup() error = %q, want invalid limit error", err)
+	}
+}
+
+func TestServiceLookupRejectsEmptyQueryBeforeProviderWork(t *testing.T) {
+	calls := 0
+	service := lookup.NewService(stubClient{calls: &calls})
+
+	_, err := service.Lookup(context.Background(), domain.ItemLookupRequest{Query: "  "})
+	if err == nil || err.Error() != "lookup query is required" {
+		t.Fatalf("Lookup() error = %v, want required query", err)
+	}
+	if calls != 0 {
+		t.Fatalf("provider calls = %d, want 0", calls)
 	}
 }

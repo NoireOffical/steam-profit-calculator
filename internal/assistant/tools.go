@@ -199,7 +199,10 @@ func (r *ToolRunner) executeLookup(ctx context.Context, call ToolCall, evidenceI
 		if errors.Is(err, lookup.ErrNoMatches) {
 			return failedExecution(call, evidenceID, "no_matches", "no matching items found")
 		}
-		return failedExecution(call, evidenceID, "provider_error", "item provider is temporarily unavailable")
+		if errors.Is(err, lookup.ErrSteamOfficialRateLimit) {
+			return failedExecution(call, evidenceID, "official_provider_rate_limited", "Steam official market API is rate limited; configure a supported third-party Steam Market Provider")
+		}
+		return failedExecution(call, evidenceID, "provider_error", "market data provider did not complete the lookup")
 	}
 
 	result := toolItems{EvidenceID: evidenceID, Items: mapItems(items)}

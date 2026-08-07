@@ -217,6 +217,9 @@ func TestSteamPublicClientLookupFailsAfterRateLimitRetries(t *testing.T) {
 	if !strings.Contains(err.Error(), "rate limited after 3 attempts") {
 		t.Fatalf("Lookup() error = %q, want rate limit retry message", err)
 	}
+	if !errors.Is(err, lookup.ErrSteamOfficialRateLimit) {
+		t.Fatalf("Lookup() error = %q, want ErrSteamOfficialRateLimit", err)
+	}
 }
 
 func TestSteamPublicClientLookupRejectsInvalidPayload(t *testing.T) {
@@ -303,6 +306,22 @@ func TestLoadConfigFromEnvironmentDefaultsProvider(t *testing.T) {
 	if cfg.Provider != lookup.ProviderSteamPublic {
 		t.Fatalf("Provider = %q, want %q", cfg.Provider, lookup.ProviderSteamPublic)
 	}
+	if cfg.BaseURL != "https://steamcommunity.com" {
+		t.Fatalf("BaseURL = %q, want Steam public default", cfg.BaseURL)
+	}
+}
+
+func TestLoadConfigFromEnvironmentUsesSteamAPIsDefaultBaseURL(t *testing.T) {
+	t.Setenv("STEAM_PROFIT_LOOKUP_PROVIDER", "steamapis")
+	t.Setenv("STEAM_PROFIT_LOOKUP_BASE_URL", "")
+
+	cfg, err := lookup.LoadConfigFromEnvironment()
+	if err != nil {
+		t.Fatalf("LoadConfigFromEnvironment() error = %v", err)
+	}
+	if cfg.BaseURL != "https://marketplaceapi.steamapis.com" {
+		t.Fatalf("BaseURL = %q, want SteamApis default", cfg.BaseURL)
+	}
 }
 
 func TestNewClientUsesSupportedProviderSelection(t *testing.T) {
@@ -311,6 +330,23 @@ func TestNewClientUsesSupportedProviderSelection(t *testing.T) {
 		BaseURL:  "https://steamcommunity.com",
 		AppID:    730,
 		Timeout:  time.Second,
+	})
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+	if client == nil {
+		t.Fatal("NewClient() returned nil client")
+	}
+}
+
+func TestNewClientUsesSteamAPIsProviderSelection(t *testing.T) {
+	client, err := lookup.NewClient(lookup.Config{
+		Provider:     lookup.ProviderSteamAPIs,
+		BaseURL:      "https://marketplaceapi.steamapis.com",
+		AppID:        730,
+		Timeout:      time.Second,
+		APIKey:       "test-key",
+		APIKeyHeader: "X-API-Key",
 	})
 	if err != nil {
 		t.Fatalf("NewClient() error = %v", err)

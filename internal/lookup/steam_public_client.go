@@ -158,12 +158,12 @@ func (c *steamCommunityClient) doLookupRequest(ctx context.Context, endpoint str
 		status := resp.Status
 		resp.Body.Close()
 		if attempt >= maxRateLimitRetries {
-			return nil, fmt.Errorf("lookup provider request failed: rate limited after %d attempts: unexpected status %s", attempt+1, status)
+			return nil, fmt.Errorf("%w after %d attempts: unexpected status %s", ErrSteamOfficialRateLimit, attempt+1, status)
 		}
 
 		wait := rateLimitDelay(resp.Header.Get("Retry-After"), attempt)
 		if err := waitForRetry(ctx, wait); err != nil {
-			return nil, fmt.Errorf("lookup provider request failed: rate limited and retry wait interrupted: %w", err)
+			return nil, fmt.Errorf("%w and retry wait was interrupted: %v", ErrSteamOfficialRateLimit, err)
 		}
 	}
 }

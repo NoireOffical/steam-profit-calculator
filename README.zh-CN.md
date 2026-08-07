@@ -10,6 +10,17 @@ Steam Profit Calculator 是一个使用 Go 编写的 Steam Community Market 收�
 
 > 本项目与 Valve 或 Steam 无关联。市场数据和计算结果仅供参考，不构成投资或交易建议。
 
+## 外部能力：接入即用，而非运行前置条件
+
+市场数据和 AI 都通过可替换适配器接入，不与确定性计算、SQLite 历史或 CSV 工作流绑死：
+
+- **不配置外部 Key 也能正常使用网站。** 收益计算、目标反推、记录保存、筛选分页和导入导出始终由本地服务完成；AI 默认关闭，市场查询默认走无需 Key 的 `steam_public`。
+- **SteamApis 配好即用。** 在服务端同时设置 `STEAM_PROFIT_LOOKUP_PROVIDER=steamapis` 和 API Key 后，网页、JSON API、CLI `lookup` 与 AI 的 `lookup_items` 工具会共用同一套标准化查询入口。轮换 Key 或切回 `steam_public` 不需要修改页面、命令参数或历史数据。
+- **OpenAI 配好即用。** 设置 `STEAM_PROFIT_AI_PROVIDER=openai` 和服务端 API Key 即可增加自然语言助手；Provider、Base URL、模型和 Key 都由环境变量管理，可独立调整或撤销。没有模型 Key 或模型暂不可用时，只停用 AI 助手，不影响其他网站功能。
+- **多入口复用同一可信内核。** 用户可以从浏览器、JSON API、CLI 或 AI 工具调用市场查询和计算能力；Provider 只负责提供外部信息，金额仍由确定性计算引擎产生。
+
+Provider 切换是显式配置，不会暗中自动回退。启用 `steamapis` 前必须先提供有效 Key；外部数据源运行时不可用时，市场查询会清晰失败，但计算、反推和历史记录仍可继续使用。
+
 ## 核心能力
 
 - 提供同源浏览器工作台和版本化 JSON API；
@@ -30,7 +41,7 @@ Steam Profit Calculator 是一个使用 Go 编写的 Steam Community Market 收�
 - 一次传入多个卖价，批量计算不同退出价格下的收益；
 - 根据目标单件收益、目标总收益或挂刀比例反推买价/卖价；
 - 支持数量和净倍率配置，默认净倍率为 `0.837`；
-- 对接 Steam Community Market 公开搜索接口，支持超时、限流重试和统一字段输出；
+- 支持 Steam Community Market 公开搜索和 SteamApis v2 认证搜索，提供超时、限流重试和统一字段输出；
 - 支持终端表格和 CSV 两种展示方式；
 - 批量导入前先校验完整文件，错误输入不会造成部分落盘；
 - 兼容旧版 CSV 记录格式，并在后续写入时迁移为当前格式；
@@ -51,7 +62,7 @@ flowchart LR
     A --> B{"工作流"}
     L["CLI 命令"] --> B
     B -->|"lookup"| C["Provider 环境配置"]
-    C --> D["Steam 公开市场客户端"]
+    C --> D["可替换市场查询客户端"]
     D --> E["标准化商品摘要"]
 
     B -->|"add / reverse"| F["收益计算领域层"]
@@ -183,7 +194,7 @@ Web 默认使用 SQLite。可以显式导入历史兼容 CSV，同一文件重�
 
 ## AI 策略助手
 
-助手默认关闭，因此没有模型密钥时，服务器、浏览器确定性工作台和 CLI 都可以正常运行。要启用 OpenAI Provider：
+助手是“接入即用”的可选增强，默认关闭；没有模型密钥时，服务器、浏览器确定性工作台和 CLI 都可以正常运行。要启用 OpenAI Provider：
 
 ```bash
 export STEAM_PROFIT_AI_PROVIDER=openai
@@ -191,7 +202,7 @@ export STEAM_PROFIT_AI_API_KEY="your-api-key"
 make run-web
 ```
 
-也可以使用标准的 `OPENAI_API_KEY`。密钥、模型和所有配置都从环境读取，后续可以随时替换；不要把真实密钥写进 `.env.example` 或提交到 Git。
+也可以使用标准的 `OPENAI_API_KEY`。密钥、模型、Base URL 和 Provider 配置都从环境读取，后续可以随时替换或关闭；切换不迁移计算记录，也不改变确定性工具契约。不要把真实密钥写进 `.env.example` 或提交到 Git。
 
 | 环境变量 | 默认值 | 用途 |
 | --- | --- | --- |
@@ -245,7 +256,7 @@ go run ./cmd/steam-profit lookup \
   --limit 5
 ```
 
-默认 provider 为 Steam Community Market 的公开搜索接口，默认应用 ID 为 `730`。查询结果是实时快照，不会写入收益记录文件。
+默认 provider 仍为 Steam Community Market 的公开搜索接口，默认应用 ID 为 `730`。也可以选择 `steamapis`，直接使用 SteamApis v2 关键词搜索；该最小路径不会下载全量目录，也不会追加详情请求。查询结果是只读快照，不会写入收益记录文件。
 
 ### 正向计算收益
 
@@ -334,17 +345,29 @@ go run ./cmd/steam-profit list --output csv --file ./custom-records.csv
 
 `lookup` 可以通过环境变量调整 provider 行为：
 
+同一套标准化查询边界同时服务于网页搜索、`/api/v1/items`、CLI `lookup` 和 AI 的只读 `lookup_items` 工具。切换 Provider 或轮换 Key 不改变这些入口，也不会迁移或改写收益历史；数据源暂不可用时，仅市场查询受影响。
+
 | 环境变量 | 默认值 | 用途 |
 | --- | --- | --- |
-| `STEAM_PROFIT_LOOKUP_PROVIDER` | `steam_public` | 查询实现 |
-| `STEAM_PROFIT_LOOKUP_BASE_URL` | `https://steamcommunity.com` | Provider 地址 |
+| `STEAM_PROFIT_LOOKUP_PROVIDER` | `steam_public` | 查询实现：`steam_public` 或 `steamapis` |
+| `STEAM_PROFIT_LOOKUP_BASE_URL` | 跟随 Provider | Provider 地址；`steam_public` 为 `https://steamcommunity.com`，`steamapis` 为 `https://marketplaceapi.steamapis.com` |
 | `STEAM_PROFIT_LOOKUP_APP_ID` | `730` | Steam 应用 ID |
 | `STEAM_PROFIT_LOOKUP_TIMEOUT_MS` | `5000` | 请求超时 |
-| `STEAM_PROFIT_LOOKUP_API_KEY` | 空 | 可选 API Key |
+| `STEAM_PROFIT_LOOKUP_API_KEY` | 空 | `steamapis` 必需的服务端 API Key |
 | `STEAM_PROFIT_LOOKUP_API_KEY_HEADER` | `X-API-Key` | API Key 请求头 |
 | `STEAM_PROFIT_LOOKUP_USER_AGENT` | `steam-profit-calculator/lookup` | HTTP User-Agent |
 
 密钥应通过环境变量注入。本地 `.env` 文件已被忽略，不应提交到仓库。
+
+使用 SteamApis 直接搜索：
+
+```bash
+export STEAM_PROFIT_LOOKUP_PROVIDER=steamapis
+export STEAM_PROFIT_LOOKUP_API_KEY="your-steamapis-key"
+go run ./cmd/steam-profit lookup --query "AK-47 Redline" --limit 5
+```
+
+SteamApis 搜索结果可能来自 Buff163、Skinport 等第三方 marketplace。当前兼容输出会把来源附在 `sell_price_text` 中，例如 `$45.99 (Buff163)`；`sale_price_text` 留空，因为轻量搜索接口不返回独立的最近成交价。该报价是 Provider 快照，不是 Steam 官方报价。
 
 ## 记录格式
 

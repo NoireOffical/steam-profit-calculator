@@ -2,6 +2,25 @@
 
 All notable demonstrable milestones are recorded here. Until the public-operation requirements are complete, each version is published as a GitHub Pre-release with an immutable annotated tag.
 
+## [Unreleased]
+
+### Added
+
+- A minimal authenticated SteamApis v2 lookup adapter that performs one direct keyword search without catalog caching or follow-up detail requests.
+- Strict SteamApis configuration and payload validation with bounded `429` retries, secret-safe failures, and deterministic provider tests.
+
+### Changed
+
+- Provider-specific lookup base URLs are selected automatically when no explicit override is configured.
+- SteamApis marketplace provenance is included in the compatible price text so third-party offers are not represented as official Steam quotes.
+- Documentation and browser copy present market-data and model providers as optional, environment-configured adapters shared by browser, API, CLI, and assistant entry points; an unavailable adapter does not imply that deterministic calculation or history is unavailable.
+- Exhausted `429` retries from the default Steam official market endpoint now use a dedicated safe error code and recommend configuring a supported third-party Steam Market Provider instead of presenting the whole feature as unavailable.
+
+### Compatibility
+
+- `steam_public` remains the default; CLI flags, lookup JSON/CSV fields, calculation formulas, CSV records, and SQLite storage remain unchanged.
+- Provider and API-key rotation requires no record migration. Selecting `steamapis` still requires valid configuration before startup, and provider selection never silently falls back.
+
 ## [v0.6.0] - 2026-08-07
 
 ### Added

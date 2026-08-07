@@ -58,14 +58,17 @@ Railway 服务变量：
 | `STEAM_PROFIT_RATE_LIMIT_PER_MINUTE` | `120` |
 | `STEAM_PROFIT_AI_RUNS_PER_HOUR` | `12` |
 | `STEAM_PROFIT_TRUST_PROXY_HEADERS` | `true` |
+| `STEAM_PROFIT_LOOKUP_PROVIDER` | 默认 `steam_public`；准备好 SteamApis Secret 后可切换为 `steamapis` |
+| `STEAM_PROFIT_LOOKUP_API_KEY` | 仅选择 `steamapis` 时设置为 Railway Secret |
 | `STEAM_PROFIT_AI_PROVIDER` | 首次部署保持 `disabled`；模型验收后再改为 `openai` |
+| `STEAM_PROFIT_AI_API_KEY` | 仅启用 `openai` 时设置为 Railway Secret；也可使用 `OPENAI_API_KEY` |
 | `RAILWAY_RUN_UID` | `0`；仅允许容器入口修正 root 所有的卷挂载点，随后立即降权为 `steam-profit` 用户运行应用 |
 
 不要设置 `STEAM_PROFIT_SERVER_ADDR`，让应用跟随 Railway 的 `PORT`。Railway Volume 以 root 所有者挂载；官方建议非 root 镜像配置 `RAILWAY_RUN_UID=0`。本镜像只用该权限修正 `/data` 顶层目录的所有者，然后通过 `su-exec` 立即以 `steam-profit` 用户启动服务器，默认的 Compose 路径仍直接以非 root 用户运行。参见 [Using Volumes — Permissions](https://docs.railway.com/volumes#permissions)。Railway 官方说明其公共入口使用 HTTPS，并提供 `X-Real-IP` 表示客户端地址：[Public networking specs and limits](https://docs.railway.com/networking/public-networking/specs-and-limits)。Railway 带 Volume 的服务在更新时不会同时把同一个卷挂载到两个部署，因此发布切换会有短暂停机：[Healthchecks — services with attached volumes](https://docs.railway.com/deployments/healthchecks#services-with-attached-volumes)。这与当前单实例 SQLite 边界一致。
 
 ### `v0.6.0` 实际部署基线
 
-截至 2026-08-07，当前环境使用 Railway Trial、EU West 单副本、挂载到 `/data` 的 0.5 GB Volume 和 Railway 托管 HTTPS。数据库固定为 `/data/steam-profit.db`，部署状态为 Online；共享用户名和随机密码只保存在 Railway Variables 与 GitHub Actions Secrets 中，不写入仓库。线上 `STEAM_PROFIT_AI_PROVIDER=disabled`，因此演示不会产生模型费用，也不能展示真实模型回答。
+截至 2026-08-07，当前环境使用 Railway Trial、EU West 单副本、挂载到 `/data` 的 0.5 GB Volume 和 Railway 托管 HTTPS。数据库固定为 `/data/steam-profit.db`，部署状态为 Online；共享用户名和随机密码只保存在 Railway Variables 与 GitHub Actions Secrets 中，不写入仓库。线上 `STEAM_PROFIT_AI_PROVIDER=disabled`，因此演示不会产生模型费用，也不能展示真实模型回答；AI 是可选适配器，这一状态不影响查询、计算、反推和 SQLite 历史工作台。
 
 首次部署实际暴露了 Railway Volume 的 root 所有权边界。容器现在保持默认 `USER steam-profit`；只有 Railway 显式设置 `RAILWAY_RUN_UID=0` 时，入口脚本才修正 `/data` 顶层目录并立即降权。该修复已通过线上健康检查和重启持久化验收。
 
@@ -175,5 +178,5 @@ sqlite3 ./railway-data-backup/steam-profit.db "PRAGMA integrity_check;"
 1. 当前只有共享 Basic 凭据，没有注册、角色、租户或用户数据隔离；
 2. 限流、模型配额和指标存在于单进程内，重启会清空且无法跨副本协调；
 3. Railway Trial 没有托管 Backups/PITR，当前恢复证据是手动全卷导出后的隔离恢复；
-4. 线上 Provider 保持关闭，没有临时模型密钥，也没有付费当前/基线真实模型报告；
+4. 线上 OpenAI 适配器保持关闭，没有临时模型密钥，也没有付费当前/基线真实模型报告；确定性网站功能不受影响，但仍不能宣称真实模型质量已经线上验收；
 5. SQLite 只支持当前单副本边界，多实例和正式用户场景需要 PostgreSQL 与在线迁移。

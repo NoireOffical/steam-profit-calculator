@@ -69,9 +69,12 @@ go run ./cmd/steam-profit lookup \
 go run ./cmd/steam-profit lookup --query "AK-47" --limit 5 --output table
 ```
 
+这是一个“接入即用”的适配层：同一查询接口还会被网页、JSON API 和 AI 的只读 `lookup_items` 工具复用。轮换 API Key 或切换 `steam_public` / `steamapis` 不需要改命令参数或迁移记录；外部数据源故障只影响 `lookup`，不会影响 `add`、`reverse`、`import`、`list` 或网站中的计算与历史功能。
+
 当前支持的 provider：
 
 - `steam_public`：Steam Community Market 公开搜索接口，也是默认 provider
+- `steamapis`：SteamApis v2 认证关键词搜索；不下载全量目录，也不请求商品详情
 
 如果未设置 `STEAM_PROFIT_LOOKUP_PROVIDER`，默认使用 `steam_public`。如果设置了暂不支持的 provider，命令会直接返回配置错误，不会隐式 fallback 到其他 provider。
 
@@ -90,10 +93,10 @@ STEAM_PROFIT_LOOKUP_USER_AGENT
 默认行为：
 
 - `STEAM_PROFIT_LOOKUP_PROVIDER`：默认 `steam_public`
-- `STEAM_PROFIT_LOOKUP_BASE_URL`：默认 `https://steamcommunity.com`
+- `STEAM_PROFIT_LOOKUP_BASE_URL`：未设置时跟随 provider；`steam_public` 使用 `https://steamcommunity.com`，`steamapis` 使用 `https://marketplaceapi.steamapis.com`
 - `STEAM_PROFIT_LOOKUP_APP_ID`：默认 `730`
 - `STEAM_PROFIT_LOOKUP_TIMEOUT_MS`：默认 `5000`
-- `STEAM_PROFIT_LOOKUP_API_KEY`：默认空
+- `STEAM_PROFIT_LOOKUP_API_KEY`：默认空；选择 `steamapis` 时必填
 - `STEAM_PROFIT_LOOKUP_API_KEY_HEADER`：默认 `X-API-Key`
 - `STEAM_PROFIT_LOOKUP_USER_AGENT`：默认 `steam-profit-calculator/lookup`
 
@@ -104,11 +107,21 @@ STEAM_PROFIT_LOOKUP_PROVIDER=steam_public \
 go run ./cmd/steam-profit lookup --query "AK-47" --limit 5
 ```
 
+使用 SteamApis 简单搜索：
+
+```bash
+STEAM_PROFIT_LOOKUP_PROVIDER=steamapis \
+STEAM_PROFIT_LOOKUP_API_KEY="your-steamapis-key" \
+go run ./cmd/steam-profit lookup --query "AK-47 Redline" --limit 5
+```
+
 请求行为补充：
 
 - 所有 lookup 请求都会携带 `User-Agent`
 - 当 provider 返回 `429 Too Many Requests` 时，客户端会优先遵循 `Retry-After`，否则按短退避自动重试
 - 如果多次重试后仍然被限流，命令会显式失败并保留 rate limit 错误信息
+- SteamApis 的轻量搜索结果只提供 marketplace 最低美元报价和挂单数；来源会附在 `sell_price_text`，`sale_price_text` 留空
+- SteamApis 报价可能来自 Buff163、Skinport 等第三方 marketplace，不能标记为 Steam 官方市场价
 
 ### 3.3 输出字段
 
