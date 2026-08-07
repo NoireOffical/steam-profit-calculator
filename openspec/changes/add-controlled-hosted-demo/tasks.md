@@ -18,6 +18,7 @@
 - [x] 3.3 Document the vendor-neutral one-replica HTTPS, secret injection, persistent volume, backup, restore, and immutable rollback contract
 - [x] 3.4 Select Railway after user approval and add its deployment manifest without creating an unapproved paid persistent-storage resource
 - [x] 3.5 Add a manual two-phase hosted persistence exercise that proves a versioned marker survives a platform restart without making scheduled smoke checks stateful
+- [x] 3.6 Handle Railway's root-owned volume mount with a narrowly scoped startup ownership repair while keeping the application process non-root
 
 ## 4. Verification And Release
 

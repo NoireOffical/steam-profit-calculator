@@ -10,7 +10,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/steam-p
 
 FROM alpine:3.24.1 AS runtime
 
-RUN apk add --no-cache ca-certificates \
+RUN apk add --no-cache ca-certificates su-exec \
     && addgroup -S steam-profit \
     && adduser -S -G steam-profit steam-profit \
     && mkdir -p /app/demo /data \
@@ -18,6 +18,7 @@ RUN apk add --no-cache ca-certificates \
 
 COPY --from=build /out/steam-profit-server /app/steam-profit-server
 COPY demo/seed.csv /app/demo/seed.csv
+COPY --chmod=0755 script/container_entrypoint.sh /app/container-entrypoint.sh
 
 USER steam-profit
 WORKDIR /data
@@ -32,4 +33,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
   CMD wget -q -T 2 -O /dev/null "http://127.0.0.1:${PORT}/api/health" || exit 1
 
-ENTRYPOINT ["/app/steam-profit-server"]
+ENTRYPOINT ["/app/container-entrypoint.sh"]

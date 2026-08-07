@@ -59,8 +59,9 @@ Railway 服务变量：
 | `STEAM_PROFIT_AI_RUNS_PER_HOUR` | `12` |
 | `STEAM_PROFIT_TRUST_PROXY_HEADERS` | `true` |
 | `STEAM_PROFIT_AI_PROVIDER` | 首次部署保持 `disabled`；模型验收后再改为 `openai` |
+| `RAILWAY_RUN_UID` | `0`；仅允许容器入口修正 root 所有的卷挂载点，随后立即降权为 `steam-profit` 用户运行应用 |
 
-不要设置 `STEAM_PROFIT_SERVER_ADDR`，让应用跟随 Railway 的 `PORT`。Railway 官方说明其公共入口使用 HTTPS，并提供 `X-Real-IP` 表示客户端地址：[Public networking specs and limits](https://docs.railway.com/networking/public-networking/specs-and-limits)。Railway 带 Volume 的服务在更新时不会同时把同一个卷挂载到两个部署，因此发布切换会有短暂停机：[Healthchecks — services with attached volumes](https://docs.railway.com/deployments/healthchecks#services-with-attached-volumes)。这与当前单实例 SQLite 边界一致。
+不要设置 `STEAM_PROFIT_SERVER_ADDR`，让应用跟随 Railway 的 `PORT`。Railway Volume 以 root 所有者挂载；官方建议非 root 镜像配置 `RAILWAY_RUN_UID=0`。本镜像只用该权限修正 `/data` 顶层目录的所有者，然后通过 `su-exec` 立即以 `steam-profit` 用户启动服务器，默认的 Compose 路径仍直接以非 root 用户运行。参见 [Using Volumes — Permissions](https://docs.railway.com/volumes#permissions)。Railway 官方说明其公共入口使用 HTTPS，并提供 `X-Real-IP` 表示客户端地址：[Public networking specs and limits](https://docs.railway.com/networking/public-networking/specs-and-limits)。Railway 带 Volume 的服务在更新时不会同时把同一个卷挂载到两个部署，因此发布切换会有短暂停机：[Healthchecks — services with attached volumes](https://docs.railway.com/deployments/healthchecks#services-with-attached-volumes)。这与当前单实例 SQLite 边界一致。
 
 ## 模型密钥与手动质量评测
 
