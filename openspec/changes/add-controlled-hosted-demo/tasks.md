@@ -17,6 +17,7 @@
 - [x] 3.2 Add a hosted synthetic smoke script and scheduled/manual workflow that performs read-only health and authenticated status checks
 - [x] 3.3 Document the vendor-neutral one-replica HTTPS, secret injection, persistent volume, backup, restore, and immutable rollback contract
 - [x] 3.4 Select Railway after user approval and add its deployment manifest without creating an unapproved paid persistent-storage resource
+- [x] 3.5 Add a manual two-phase hosted persistence exercise that proves a versioned marker survives a platform restart without making scheduled smoke checks stateful
 
 ## 4. Verification And Release
 

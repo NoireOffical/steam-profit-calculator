@@ -1,0 +1,40 @@
+name: Hosted Persistence Exercise
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Prepare the marker before restart, or verify it after restart
+        required: true
+        type: choice
+        options:
+          - prepare
+          - verify
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hosted-demo-persistence
+  cancel-in-progress: false
+
+jobs:
+  persistence:
+    name: ${{ inputs.mode == 'prepare' && 'Prepare persistence marker' || 'Verify persistence marker' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      STEAM_PROFIT_DEMO_URL: ${{ vars.STEAM_PROFIT_DEMO_URL }}
+      STEAM_PROFIT_DEMO_USERNAME: ${{ secrets.STEAM_PROFIT_DEMO_USERNAME }}
+      STEAM_PROFIT_DEMO_PASSWORD: ${{ secrets.STEAM_PROFIT_DEMO_PASSWORD }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Check hosted access boundary
+        run: bash script/hosted_smoke.sh
+
+      - name: ${{ inputs.mode == 'prepare' && 'Prepare persistence marker' || 'Verify persistence marker' }}
+        run: bash script/hosted_persistence_smoke.sh "${{ inputs.mode }}"

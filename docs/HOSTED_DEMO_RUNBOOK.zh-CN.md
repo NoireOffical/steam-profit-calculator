@@ -107,6 +107,8 @@ bash script/hosted_smoke.sh
 
 `Hosted Demo Smoke` 工作流每 6 小时运行一次，也可手动提供临时 URL。配置 `STEAM_PROFIT_DEMO_URL` 后，它执行与本地相同的只读检查；失败时 GitHub Actions 会把本次工作流标记为失败，作为当前的最小告警渠道。
 
+实际托管环境的重启持久化验收使用手动 `Hosted Persistence Exercise` 工作流。先以 `prepare` 模式写入唯一的版本化验收记录，再从 Railway 重启或重新部署同一服务，最后以 `verify` 模式确认该记录仍存在。该工作流不会定时运行，避免日常巡检产生写入副作用。
+
 当前日志和指标仍是进程内数据：
 
 - 日志只包含请求方法、路径、状态、耗时和随机请求 ID；
