@@ -2,7 +2,7 @@
 
 All notable demonstrable milestones are recorded here. Until the public-operation requirements are complete, each version is published as a GitHub Pre-release with an immutable annotated tag.
 
-## [v0.6.0] - Unreleased
+## [v0.6.0] - 2026-08-07
 
 ### Added
 
@@ -13,12 +13,18 @@ All notable demonstrable milestones are recorded here. Until the public-operatio
 - Manual-only current/baseline live-model evaluation with bounded cases and short-lived sanitized report artifacts.
 - Scheduled/manual read-only hosted smoke checks plus a Railway manifest and HTTPS, secret, persistent-volume, backup, restore, and rollback runbook.
 - Railway `PORT` startup compatibility and trusted `X-Real-IP` client identification without changing explicit local address behavior.
+- A live single-replica Railway demo with managed HTTPS, Basic access control, a persistent `/data` volume, and AI disabled by default.
+- A manual two-phase hosted persistence exercise, plus full-volume export, SQLite integrity, and isolated restore verification.
+
+### Changed
+
+- The container remains non-root by default; Railway may set `RAILWAY_RUN_UID=0` only so the entrypoint can repair the root-owned `/data` mount before immediately dropping to `steam-profit`.
 
 ### Compatibility
 
 - All access controls default to disabled, so existing local server, CLI, calculation, SQLite, and CSV workflows remain unchanged.
 - Health checks remain unauthenticated; trusted forwarded client addresses require an explicit opt-in.
-- No live Railway deployment or paid model baseline is claimed until persistent storage, hosted smoke, restore evidence, and temporary model credentials are supplied and verified.
+- The controlled Railway instance, hosted smoke, restart persistence, and manual isolated restore are verified. Railway Trial managed Backups/PITR and a paid live-model baseline remain explicitly unverified; the hosted Provider stays disabled.
 
 ## [v0.5.0] - 2026-08-07
 
@@ -109,6 +115,6 @@ All notable demonstrable milestones are recorded here. Until the public-operatio
 [v0.3.0]: https://github.com/NoireOffical/steam-profit-calculator/releases/tag/v0.3.0
 [v0.4.0]: https://github.com/NoireOffical/steam-profit-calculator/releases/tag/v0.4.0
 [v0.5.0]: https://github.com/NoireOffical/steam-profit-calculator/releases/tag/v0.5.0
-[v0.6.0]: https://github.com/NoireOffical/steam-profit-calculator/compare/v0.5.0...main
+[v0.6.0]: https://github.com/NoireOffical/steam-profit-calculator/releases/tag/v0.6.0
 [v0.2.0]: https://github.com/NoireOffical/steam-profit-calculator/releases/tag/v0.2.0
 [v0.1.0]: https://github.com/NoireOffical/steam-profit-calculator/releases/tag/v0.1.0

@@ -1,6 +1,6 @@
 # 受控托管演示运行手册
 
-本手册定义 `v0.6.0` 受控在线演示的最低运行契约。当前仓库已经实现平台无关的访问控制、限流、模型配额、只读线上检查和手动真实模型评测，并已选择 Railway、加入 `railway.toml`。在实际 Railway 项目、持久卷和域名通过验收前，仍没有可公开声明的线上地址。
+本手册定义 `v0.6.0` 受控在线演示的最低运行契约。当前仓库已经实现平台无关的访问控制、限流、模型配额、只读线上检查和手动真实模型评测，并已在 Railway 完成单副本、HTTPS、Secret、持久卷、重启持久化和手动恢复验收。受控地址是 [steam-profit-calculator-production.up.railway.app](https://steam-profit-calculator-production.up.railway.app)；健康检查公开，交互页面需要单独提供的评审凭据。
 
 这套边界用于“把作品集安全地给少量评审访问”，不是完整账号系统，也不代表项目已经适合公开运营。
 
@@ -63,6 +63,12 @@ Railway 服务变量：
 
 不要设置 `STEAM_PROFIT_SERVER_ADDR`，让应用跟随 Railway 的 `PORT`。Railway Volume 以 root 所有者挂载；官方建议非 root 镜像配置 `RAILWAY_RUN_UID=0`。本镜像只用该权限修正 `/data` 顶层目录的所有者，然后通过 `su-exec` 立即以 `steam-profit` 用户启动服务器，默认的 Compose 路径仍直接以非 root 用户运行。参见 [Using Volumes — Permissions](https://docs.railway.com/volumes#permissions)。Railway 官方说明其公共入口使用 HTTPS，并提供 `X-Real-IP` 表示客户端地址：[Public networking specs and limits](https://docs.railway.com/networking/public-networking/specs-and-limits)。Railway 带 Volume 的服务在更新时不会同时把同一个卷挂载到两个部署，因此发布切换会有短暂停机：[Healthchecks — services with attached volumes](https://docs.railway.com/deployments/healthchecks#services-with-attached-volumes)。这与当前单实例 SQLite 边界一致。
 
+### `v0.6.0` 实际部署基线
+
+截至 2026-08-07，当前环境使用 Railway Trial、EU West 单副本、挂载到 `/data` 的 0.5 GB Volume 和 Railway 托管 HTTPS。数据库固定为 `/data/steam-profit.db`，部署状态为 Online；共享用户名和随机密码只保存在 Railway Variables 与 GitHub Actions Secrets 中，不写入仓库。线上 `STEAM_PROFIT_AI_PROVIDER=disabled`，因此演示不会产生模型费用，也不能展示真实模型回答。
+
+首次部署实际暴露了 Railway Volume 的 root 所有权边界。容器现在保持默认 `USER steam-profit`；只有 Railway 显式设置 `RAILWAY_RUN_UID=0` 时，入口脚本才修正 `/data` 顶层目录并立即降权。该修复已通过线上健康检查和重启持久化验收。
+
 ## 模型密钥与手动质量评测
 
 如果线上演示启用 OpenAI Provider，把 `OPENAI_API_KEY` 或 `STEAM_PROFIT_AI_API_KEY` 保存为托管平台 Secret。不要把密钥写进 `.env.example`、工作流文件、镜像层或公开仓库。OpenAI 官方也建议通过环境变量或密钥管理服务加载密钥，并避免在代码和公开仓库中暴露密钥：[Production best practices — API keys](https://developers.openai.com/api/docs/guides/production-best-practices#api-keys)。
@@ -110,6 +116,12 @@ bash script/hosted_smoke.sh
 
 实际托管环境的重启持久化验收使用手动 `Hosted Persistence Exercise` 工作流。先以 `prepare` 模式写入唯一的版本化验收记录，再从 Railway 重启或重新部署同一服务，最后以 `verify` 模式确认该记录仍存在。该工作流不会定时运行，避免日常巡检产生写入副作用。
 
+`v0.6.0` 已保留以下 GitHub Actions 证据：
+
+- [Hosted Demo Smoke：健康、认证边界、浏览器标记和助手关闭状态](https://github.com/NoireOffical/steam-profit-calculator/actions/runs/31154963602)；
+- [Hosted Persistence Exercise：写入唯一版本化标记](https://github.com/NoireOffical/steam-profit-calculator/actions/runs/31155723364)；
+- [Hosted Persistence Exercise：Railway 重启后读取同一标记](https://github.com/NoireOffical/steam-profit-calculator/actions/runs/31155897200)。
+
 当前日志和指标仍是进程内数据：
 
 - 日志只包含请求方法、路径、状态、耗时和随机请求 ID；
@@ -120,9 +132,19 @@ bash script/hosted_smoke.sh
 
 ### 备份
 
-至少在每个发布和数据库迁移前生成一次一致性备份。平台支持卷快照时优先使用卷快照；否则先停止单实例，再归档整个 `/data` 目录。备份完成后检查 SQLite 完整性，并记录备份对应的应用 Tag。
+至少在每个发布和数据库迁移前生成一次一致性备份。平台支持卷快照时优先使用卷快照；否则先冻结外部写入，再归档整个 `/data` 目录。能够离线访问卷时可以停止实例；只能通过运行中服务下载文件时，必须选择无写入窗口并在导出后验证 SQLite 完整性。每份备份都要记录对应的应用 Tag。
 
 不要把数据库备份提交到 Git。备份可能包含演示计算记录，应保存到受控对象存储或平台备份空间，并设置保留期。
+
+当前 Railway Trial 页面不提供托管 Backups/PITR；启用该能力需要升级 Pro，本里程碑没有执行任何付费升级。因此当前可用路径是 Railway CLI 的完整服务文件导出。Railway CLI 需要连接运行中的服务，正式备份时应先阻止评审写入、等待在途请求结束，再下载整个 `/data`，不能只复制主数据库文件而遗漏 `-wal` 与 `-shm`：
+
+```bash
+railway link
+railway service files download /data ./railway-data-backup
+sqlite3 ./railway-data-backup/steam-profit.db "PRAGMA integrity_check;"
+```
+
+导出目录和其中的凭据无关，但可能包含演示历史数据，必须按数据库备份处理。CLI 所需 SSH 公钥应使用临时、唯一命名的密钥，完成下载后同时从 Railway 和本机移除。
 
 ### 恢复演练
 
@@ -134,20 +156,24 @@ bash script/hosted_smoke.sh
 4. 人工确认历史记录数量和最近一条记录；
 5. 验收后再切换流量，保留旧卷直到回滚窗口结束。
 
+2026-08-07 的实际演练从 Railway 下载了完整 `/data`（主文件及 WAL sidecar），`PRAGMA integrity_check` 返回 `ok`。副本随后由当前服务器二进制在独立本机端口启动，公开健康检查返回成功，并读取到平台重启前写入的唯一 `Railway Hosted Persistence v0.6` 标记。演练结束后，临时服务已优雅停止，Railway 临时 SSH 公钥、本机私钥和本地数据库副本均已删除；原始 Railway Volume 未修改。
+
+这证明当前数据可以被导出并由同版本应用恢复读取，但不等于托管快照、PITR、异地长期保留或新 Railway Volume 的平台级恢复已经可用。升级套餐前，每次发布都需要重新执行手动导出，并把加密备份保存到受控位置。
+
 ### 应用回滚
 
 当前稳定回滚点是 `v0.5.0`。回滚时固定旧 Tag 的镜像，保留同一持久卷并保持单实例；先检查该版本是否理解当前数据库迁移，再切换流量。若存储兼容性存在疑问，使用发布前备份恢复到新卷，不要降级覆盖唯一数据副本。
 
 更具体的本地 SQLite 和 Compose 归档命令见[演示与运行手册](DEMO_RUNBOOK.zh-CN.md)。
 
-## 当前边界与上线阻塞项
+## 当前边界与剩余升级项
 
-Railway 清单完成后，仍需以下证据才能称为“在线演示已上线”：
+`v0.6.0` 已达到“少量评审可访问的受控在线演示”：Railway 单副本、HTTPS、Secret、`/data` Volume、公开依赖健康检查、认证页面、定时只读 smoke、重启持久化和手动导出/隔离恢复均有实际证据。
 
-1. 创建 Railway 项目，确认实际套餐和 Volume 费用边界；
-2. 固定单副本、公共 HTTPS 域名、Secret 和 `/data` Volume；
-3. 实际部署后运行一次线上只读 smoke；
-4. 完成一次备份与新卷恢复演练；
-5. 如提供临时模型密钥，再生成一次当前/基线真实模型报告。
+它仍不能称为公开运营服务：
 
-在这些条件满足前，仓库只能声明“受控托管能力已准备”，不能声明已经存在公开可访问的托管实例或真实模型基线。
+1. 当前只有共享 Basic 凭据，没有注册、角色、租户或用户数据隔离；
+2. 限流、模型配额和指标存在于单进程内，重启会清空且无法跨副本协调；
+3. Railway Trial 没有托管 Backups/PITR，当前恢复证据是手动全卷导出后的隔离恢复；
+4. 线上 Provider 保持关闭，没有临时模型密钥，也没有付费当前/基线真实模型报告；
+5. SQLite 只支持当前单副本边界，多实例和正式用户场景需要 PostgreSQL 与在线迁移。

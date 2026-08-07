@@ -24,6 +24,7 @@ Steam Profit Calculator 是一个使用 Go 编写的 Steam Community Market 收�
 - 提供七条隔离的 Playwright Chromium 流程，覆盖持久化、分页、输入错误、AI 关闭降级、临时上下文/重试、取消和演示访问控制；
 - 提供非 root Docker Compose 演示、固定种子数据、SQLite 命名卷和健康检查；
 - 提供可选共享演示凭据、每客户端 API 限流、全局模型调用配额和只读线上合成检查；
+- 提供已验收的 Railway 单副本部署、托管 HTTPS、SQLite 持久卷、重启检查和手动导出/恢复路径；
 - 每个请求具有关联 ID，并提供不记录用户内容的结构化日志与请求/助手聚合指标；
 - 保留 `lookup`、`add`、`reverse`、`import`、`list` 五个独立 CLI 命令；
 - 一次传入多个卖价，批量计算不同退出价格下的收益；
@@ -117,6 +118,8 @@ docker compose up --build --wait
 
 完整演示顺序、浏览器测试、备份、恢复和回滚方法见[演示与运行手册](docs/DEMO_RUNBOOK.zh-CN.md)；Railway 的 HTTPS、Secret、限流、持久卷、线上检查和发布边界见[受控托管演示运行手册](docs/HOSTED_DEMO_RUNBOOK.zh-CN.md)。
 
+受控 Railway 演示已上线：[steam-profit-calculator-production.up.railway.app](https://steam-profit-calculator-production.up.railway.app)。健康检查公开，交互工作台需要单独提供的评审凭据。托管助手暂时保持关闭，只有提供临时模型密钥和付费评测预算后才会启用。
+
 ## 浏览器工作台
 
 启动本地 Web 应用：
@@ -176,7 +179,7 @@ Web 默认使用 SQLite。可以显式导入历史兼容 CSV，同一文件重�
 
 每个 HTTP 响应都包含 `X-Request-ID`。请求日志只记录方法、路径、状态、耗时和关联 ID；聚合指标不记录查询字符串、请求体、Prompt、模型回答、市场数据、密钥或历史记录值。
 
-当前 Web 版本仍面向本地单用户或少量评审的受控演示。配置共享 Basic 凭据后，除健康检查外的页面与 API 都会受保护；API 限流和模型调用配额也可独立启用。仓库已包含 Railway 部署清单，但它仍不是完整用户系统：没有注册、租户隔离、跨实例限流、持久化监控或已验收的托管备份。浏览器最多发送 6 条页面内历史，但对话、Provider 响应和工具依据都不落盘。
+当前 Web 版本仍面向本地单用户或少量评审的受控演示。Railway 实例已经验收共享 Basic 凭据、公开依赖健康检查、请求限流、单个 SQLite 持久卷、应用重启，以及通过 SQLite 完整性与隔离启动检查的全卷导出。它仍不是完整用户系统：没有注册、租户隔离、跨实例限流、持久化监控、托管备份/PITR 或付费真实模型基线。浏览器最多发送 6 条页面内历史，但对话、Provider 响应和工具依据都不落盘。
 
 ## AI 策略助手
 

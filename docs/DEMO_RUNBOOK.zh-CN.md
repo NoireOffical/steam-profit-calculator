@@ -101,7 +101,7 @@ make ai-eval-baseline
 
 配置共享演示凭据后，浏览器页面、静态资源和应用 API 都需要认证，`GET /api/health` 仍保持公开。还可以独立设置每客户端 API 请求上限和整个进程的模型调用配额。完整环境变量、HTTPS、Secret、线上只读检查、备份和不可变 Tag 回滚要求见[受控托管演示运行手册](HOSTED_DEMO_RUNBOOK.zh-CN.md)。
 
-仓库已经提供 `railway.toml`、平台端口适配和 Railway 配置手册，但尚未声明已经部署线上实例。实际 Railway 项目仍需挂载 `/data` Volume、注入 Secret、生成 HTTPS 域名，并完成线上 smoke 与恢复演练。
+受控实例已部署在 [steam-profit-calculator-production.up.railway.app](https://steam-profit-calculator-production.up.railway.app)。它使用单副本、Railway 托管 HTTPS、共享评审凭据和挂载到 `/data` 的 SQLite Volume；线上只读 smoke、平台重启后的持久化标记，以及全卷导出后的 SQLite 完整性与隔离恢复检查均已通过。凭据不公开，线上 AI Provider 暂时关闭；详细证据和 Railway Trial 的备份限制见[受控托管演示运行手册](HOSTED_DEMO_RUNBOOK.zh-CN.md)。
 
 ## SQLite 备份与恢复
 
@@ -160,4 +160,4 @@ docker compose up --build --wait
 - 存储回滚：使用 `--storage=csv --file <path>` 启动旧版 CSV 模式。
 - Compose 回滚：固定旧镜像版本并保留同一命名卷；单实例 SQLite 不支持横向扩容。
 - 当前日志和指标仅存在于运行进程，没有远程采集、告警或长期保留。
-- 当前已有共享演示凭据、进程内 API 限流和模型配额，但仍无注册登录、租户隔离、托管备份、持久化监控或已验收的公网 TLS，不应直接作为公开运营服务。
+- 当前 Railway 演示已经验收公网 TLS、共享凭据、进程内 API 限流、模型配额和手动恢复路径，但仍无注册登录、租户隔离、托管 Backups/PITR、持久化监控或真实模型线上基线，不应直接作为公开运营服务。

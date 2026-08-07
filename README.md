@@ -24,6 +24,7 @@ The project keeps its formulas, storage schema, provider behavior, and error han
 - Seven isolated Playwright Chromium workflows covering persistence, pagination, validation, AI-disabled fallback, transient context/retry, cancellation, and demo access control
 - A non-root Docker Compose demo with deterministic seed data, a named SQLite volume, and health checks
 - Optional shared demo credentials, per-client API limiting, a global model-run quota, and read-only hosted synthetic checks
+- A verified single-replica Railway deployment with managed HTTPS, persistent SQLite storage, restart checks, and a rehearsed manual export/restore path
 - Request IDs, content-free structured request logs, and aggregate request/assistant metrics
 - Five compatible CLI commands: `lookup`, `add`, `reverse`, `import`, and `list`
 - Forward calculations for multiple sell prices in one invocation
@@ -117,6 +118,8 @@ docker compose up --build --wait
 
 See the [demo and operations runbook](docs/DEMO_RUNBOOK.zh-CN.md) for the walkthrough, browser test, backup, restore, and rollback paths. The [controlled hosted-demo runbook](docs/HOSTED_DEMO_RUNBOOK.zh-CN.md) defines the Railway HTTPS, secret, limit, persistent-volume, synthetic-check, and release boundary.
 
+The controlled Railway demo is live at [steam-profit-calculator-production.up.railway.app](https://steam-profit-calculator-production.up.railway.app). The health endpoint is public; the workbench requires a separately supplied reviewer credential. The hosted assistant intentionally remains disabled until a temporary model key and paid evaluation budget are supplied.
+
 ## Browser workbench
 
 Start the local web application:
@@ -176,7 +179,7 @@ The source CSV is never modified. Existing source rows are skipped on repeat imp
 
 Every HTTP response includes an `X-Request-ID`. Request logs contain method, path, status, duration, and request ID only; aggregate metrics omit query strings, bodies, prompts, model output, market data, credentials, and record values.
 
-This remains a local single-user application or a controlled demo for a small reviewer group. Shared Basic credentials can protect every page and API except health, while API limits and a model-run quota are independently configurable. A Railway deployment manifest is included, but this is not a full user system: registration, tenant isolation, cross-replica limits, persistent telemetry, and a verified managed backup are still absent. The browser may send at most six page-local prior messages, but conversations, provider responses, and tool evidence are never persisted.
+This remains a local single-user application or a controlled demo for a small reviewer group. The Railway instance has been verified with shared Basic credentials, public dependency health, request limits, one persistent SQLite volume, an application restart exercise, and a full-volume export that passed SQLite integrity and isolated-restore checks. It is not a full user system: registration, tenant isolation, cross-replica limits, persistent telemetry, managed backup/PITR, and a paid live-model baseline are still absent. The browser may send at most six page-local prior messages, but conversations, provider responses, and tool evidence are never persisted.
 
 ## AI strategy assistant
 

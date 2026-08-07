@@ -19,10 +19,11 @@
 - [x] 3.4 Select Railway after user approval and add its deployment manifest without creating an unapproved paid persistent-storage resource
 - [x] 3.5 Add a manual two-phase hosted persistence exercise that proves a versioned marker survives a platform restart without making scheduled smoke checks stateful
 - [x] 3.6 Handle Railway's root-owned volume mount with a narrowly scoped startup ownership repair while keeping the application process non-root
+- [x] 3.7 Export the complete Railway data directory, verify SQLite integrity and an isolated restore, then remove temporary database and SSH-key material
 
 ## 4. Verification And Release
 
 - [x] 4.1 Run formatting, JavaScript syntax validation, vet, race tests, all binaries, deterministic evaluation, and Chromium E2E
 - [x] 4.2 Run remote container validation for protected startup, health, authentication, rate limiting, quota, restart persistence, and graceful stop
-- [ ] 4.3 Run a manual hosted smoke when a target exists; do not claim a live deployment or real-model baseline without credentials and evidence
-- [ ] 4.4 Update README, roadmap, demo runbook, changelog, and prepare immutable `v0.6.0` Pre-release notes after the demonstrable milestone is complete
+- [x] 4.3 Run a manual hosted smoke when a target exists; do not claim a live deployment or real-model baseline without credentials and evidence
+- [x] 4.4 Update README, roadmap, demo runbook, changelog, and prepare immutable `v0.6.0` Pre-release notes after the demonstrable milestone is complete
