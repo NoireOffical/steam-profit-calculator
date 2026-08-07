@@ -10,13 +10,55 @@ Steam Profit Calculator 是一个使用 Go 编写的 Steam Community Market 收�
 
 > 本项目与 Valve 或 Steam 无关联。市场数据和计算结果仅供参考，不构成投资或交易建议。
 
+## 当前状态
+
+最新固定里程碑是 [`v0.6.0`](docs/releases/v0.6.0.md)，已经完成确定性计算、SQLite 历史、浏览器 E2E、容器化运行和 Railway 受控演示。当前 `main` 在此基础上增加了尚未打 Tag 的 SteamApis 直接搜索适配器，具体变化记录在 [`Unreleased`](CHANGELOG.md#unreleased)。
+
+| 范围 | 交付状态 | 默认运行状态 | 验证边界 |
+| --- | --- | --- | --- |
+| 收益计算、目标反推、SQLite 历史、CSV、浏览器与 CLI | **核心产品已就绪** | 无外部 Key 即可运行 | 单元/竞态测试、7 条 Chromium E2E、容器重启持久化检查 |
+| Steam 官方公开市场查询 | **内置数据入口** | 默认启用 | 自动化契约测试；官方接口可能对自动请求限流 |
+| SteamApis 市场查询 | **可按需扩展，适配层已就绪** | 设置 Provider 与 Key 后启用 | 认证、映射、超时、`429` 重试和失败路径已确定性验证；真实 Key smoke 可作为额外验证任务执行 |
+| OpenAI 策略助手 | **可按需扩展，适配层与质量门禁已就绪** | 默认关闭，设置 Provider 与 Key 后启用 | 50 条确定性工具基线、12 条版本化语义用例和脚本 Provider 已验证；付费真实模型报告可作为额外验证任务执行 |
+| Railway 受控演示 | **`v0.6.0` 已验收** | 单副本、HTTPS、共享评审凭据、SQLite Volume | 线上只读检查、平台重启持久化、导出完整性和隔离恢复均已验证 |
+
+> SteamApis 和 OpenAI 在这里属于可插拔扩展，不是核心网站的未完成项。接入真实 Key 会增加实时市场数据或自然语言交互；不接入、暂时关闭或更换 Provider，都不影响计算、反推、历史、导入导出和 CLI。真实 Provider smoke 用于补充外部服务证据，可以单独、限量执行，不作为确定性核心的运行前置条件。
+
+受控 Railway 演示已上线：[打开演示](https://steam-profit-calculator-production.up.railway.app)。健康检查公开，交互工作台使用单独提供的评审凭据；公开演示当前运行确定性核心，SteamApis 与 OpenAI 扩展可在提供服务端 Key 后独立启用。
+
+## 界面预览
+
+### 工作台与可选 AI 区域
+
+![Steam Profit Calculator 工作台总览](docs/images/workbench-overview.png)
+
+AI 未启用时，页面会明确显示扩展状态，确定性计算工作台仍保持可用。
+
+### 多卖价计算与 SQLite 历史
+
+![多卖价计算结果与 SQLite 历史记录](docs/images/calculation-history.png)
+
+截图来自本地固定种子演示；示例记录由正式计算与持久化路径生成，不包含真实账户、API Key 或市场交易数据。
+
+## 六个里程碑的演进
+
+| 版本 | 可演示里程碑 |
+| --- | --- |
+| [`v0.1.0`](docs/releases/v0.1.0.md) | 确定性收益引擎、兼容 CLI、CSV 记录与本地浏览器基础 |
+| [`v0.2.0`](docs/releases/v0.2.0.md) | 严格工具调用、依据引用和数值门禁的 AI 策略助手 |
+| [`v0.3.0`](docs/releases/v0.3.0.md) | 版本化 SQLite、稳定记录 ID、筛选分页和幂等 CSV 导入 |
+| [`v0.4.0`](docs/releases/v0.4.0.md) | 固定演示数据、浏览器 E2E、非 root 容器、健康与可观测性 |
+| [`v0.5.0`](docs/releases/v0.5.0.md) | 类型化 OpenAI SSE、临时对话、停止/重试和版本化 AI 评测 |
+| [`v0.6.0`](docs/releases/v0.6.0.md) | Railway 受控演示、访问保护、配额、持久卷、备份与恢复验证 |
+| [`main`](CHANGELOG.md#unreleased) | SteamApis 轻量直接搜索和官方市场限流时的第三方 Provider 引导 |
+
 ## 外部能力：接入即用，而非运行前置条件
 
 市场数据和 AI 都通过可替换适配器接入，不与确定性计算、SQLite 历史或 CSV 工作流绑死：
 
 - **不配置外部 Key 也能正常使用网站。** 收益计算、目标反推、记录保存、筛选分页和导入导出始终由本地服务完成；AI 默认关闭，市场查询默认走无需 Key 的 `steam_public`。
-- **SteamApis 配好即用。** 在服务端同时设置 `STEAM_PROFIT_LOOKUP_PROVIDER=steamapis` 和 API Key 后，网页、JSON API、CLI `lookup` 与 AI 的 `lookup_items` 工具会共用同一套标准化查询入口。轮换 Key 或切回 `steam_public` 不需要修改页面、命令参数或历史数据。
-- **OpenAI 配好即用。** 设置 `STEAM_PROFIT_AI_PROVIDER=openai` 和服务端 API Key 即可增加自然语言助手；Provider、Base URL、模型和 Key 都由环境变量管理，可独立调整或撤销。没有模型 Key 或模型暂不可用时，只停用 AI 助手，不影响其他网站功能。
+- **SteamApis 扩展入口已就绪。** 在服务端同时设置 `STEAM_PROFIT_LOOKUP_PROVIDER=steamapis` 和 API Key 后，网页、JSON API、CLI `lookup` 与 AI 的 `lookup_items` 工具会共用同一套标准化查询入口。轮换 Key 或切回 `steam_public` 不需要修改页面、命令参数或历史数据。
+- **OpenAI 扩展入口与质量门禁已就绪。** 设置 `STEAM_PROFIT_AI_PROVIDER=openai` 和服务端 API Key 即可增加自然语言助手；Provider、Base URL、模型和 Key 都由环境变量管理，可独立调整或撤销。没有模型 Key 或模型暂不可用时，只停用 AI 助手，不影响其他网站功能。
 - **多入口复用同一可信内核。** 用户可以从浏览器、JSON API、CLI 或 AI 工具调用市场查询和计算能力；Provider 只负责提供外部信息，金额仍由确定性计算引擎产生。
 
 Provider 切换是显式配置，不会暗中自动回退。启用 `steamapis` 前必须先提供有效 Key；外部数据源运行时不可用时，市场查询会清晰失败，但计算、反推和历史记录仍可继续使用。
@@ -129,7 +171,7 @@ docker compose up --build --wait
 
 完整演示顺序、浏览器测试、备份、恢复和回滚方法见[演示与运行手册](docs/DEMO_RUNBOOK.zh-CN.md)；Railway 的 HTTPS、Secret、限流、持久卷、线上检查和发布边界见[受控托管演示运行手册](docs/HOSTED_DEMO_RUNBOOK.zh-CN.md)。
 
-受控 Railway 演示已上线：[steam-profit-calculator-production.up.railway.app](https://steam-profit-calculator-production.up.railway.app)。健康检查公开，交互工作台需要单独提供的评审凭据。托管助手暂时保持关闭，只有提供临时模型密钥和付费评测预算后才会启用。
+受控 Railway 演示已上线：[steam-profit-calculator-production.up.railway.app](https://steam-profit-calculator-production.up.railway.app)。健康检查公开，交互工作台需要单独提供的评审凭据。托管实例已交付确定性核心；OpenAI 扩展按设计保持默认关闭，可在提供服务端 Key 和独立预算后启用或执行额外的真实模型验证。
 
 ## 浏览器工作台
 
@@ -190,7 +232,7 @@ Web 默认使用 SQLite。可以显式导入历史兼容 CSV，同一文件重�
 
 每个 HTTP 响应都包含 `X-Request-ID`。请求日志只记录方法、路径、状态、耗时和关联 ID；聚合指标不记录查询字符串、请求体、Prompt、模型回答、市场数据、密钥或历史记录值。
 
-当前 Web 版本仍面向本地单用户或少量评审的受控演示。Railway 实例已经验收共享 Basic 凭据、公开依赖健康检查、请求限流、单个 SQLite 持久卷、应用重启，以及通过 SQLite 完整性与隔离启动检查的全卷导出。它仍不是完整用户系统：没有注册、租户隔离、跨实例限流、持久化监控、托管备份/PITR 或付费真实模型基线。浏览器最多发送 6 条页面内历史，但对话、Provider 响应和工具依据都不落盘。
+当前 Web 版本定位为本地单用户应用或少量评审使用的受控演示。Railway 实例已经验收共享 Basic 凭据、公开依赖健康检查、请求限流、单个 SQLite 持久卷、应用重启，以及通过 SQLite 完整性与隔离启动检查的全卷导出。若扩展为公开多租户产品，还需要注册、租户隔离、跨实例限流、持久化监控和托管备份/PITR；这些属于后续运营范围。付费真实模型基线属于可选的 OpenAI 扩展验证证据，不是确定性网站能力缺口。浏览器最多发送 6 条页面内历史，但对话、Provider 响应和工具依据都不落盘。
 
 ## AI 策略助手
 
@@ -225,7 +267,7 @@ make run-web
 
 ### AI 质量评测
 
-普通测试会离线执行 50 条确定性工具用例和脚本化报告测试，不访问 Steam 或 OpenAI。真实模型语义评测必须显式启用，并使用固定查询夹具：
+普通测试会离线执行 50 条确定性工具用例和脚本化报告测试，不访问 Steam 或 OpenAI。真实模型语义评测是一项可选扩展验证任务，不影响核心网站启动或确定性质量门禁；需要时可显式启用，并使用固定查询夹具：
 
 ```bash
 export STEAM_PROFIT_AI_PROVIDER=openai
@@ -369,6 +411,8 @@ go run ./cmd/steam-profit lookup --query "AK-47 Redline" --limit 5
 
 SteamApis 搜索结果可能来自 Buff163、Skinport 等第三方 marketplace。当前兼容输出会把来源附在 `sell_price_text` 中，例如 `$45.99 (Buff163)`；`sale_price_text` 留空，因为轻量搜索接口不返回独立的最近成交价。该报价是 Provider 快照，不是 Steam 官方报价。
 
+SteamApis 的适配器、配置校验和失败路径均已实现。提供临时 Key 后执行一次限量真实查询属于额外的环境验证任务，用来确认当时的第三方服务、套餐和凭据状态；它不改变核心网站的完成状态，也不会把外部 Provider 变成计算或存储的依赖。
+
 ## 记录格式
 
 终端表格和 `--output csv` 使用七个字段：
@@ -421,11 +465,11 @@ make e2e
 make container-check
 ```
 
-每次向 `main` 推送或提交 Pull Request，GitHub Actions 都会执行 Linux/macOS 确定性检查、Chromium E2E 和 Compose 持久化冒烟。Dependabot 每周检查 Go 模块、JavaScript 包、容器基础镜像和 GitHub Actions。
+`main` 已启用分支保护：变更通过 Pull Request 合入，必须保持分支最新、解决评审对话，并通过 5 项必需检查（三组 Go 平台检查、Chromium E2E 和 Compose 持久化冒烟）；禁止强推和删除分支。Dependabot 每周检查 Go 模块、JavaScript 包、容器基础镜像和 GitHub Actions。
 
 完整命令参数、字段说明和错误示例见 [CLI_USAGE.md](CLI_USAGE.md)。
 
-AI 功能、数据库、评测与公开部署的剩余范围见 [AI 全栈实践路线与工作量评估](docs/AI_FULLSTACK_ROADMAP.zh-CN.md)。
+AI、数据库、评测与公开运营的进一步扩展方向见 [AI 全栈实践路线与工作量评估](docs/AI_FULLSTACK_ROADMAP.zh-CN.md)。
 
 每个可演示里程碑都使用不可移动的语义化版本 Tag 和 GitHub Pre-release，规则见 [里程碑发布流程](docs/development/release-workflow.md)，版本记录见 [CHANGELOG](CHANGELOG.md)。
 

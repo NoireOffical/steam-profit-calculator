@@ -10,7 +10,8 @@
 - [x] 3.2 Update browser copy so lookup results are not described as official Steam public prices
 - [x] 3.3 Describe SteamApis and OpenAI as optional, replaceable, environment-configured adapters and make degraded-state copy preserve the deterministic website boundary
 - [x] 3.4 Classify exhausted Steam official `429` retries and recommend a supported third-party Steam Market Provider without labeling the website unavailable
+- [x] 3.5 Add bilingual README screenshots, milestone status, and an explicit core-versus-extension verification boundary
 
 - [x] 4.1 Run OpenSpec validation, formatting, JavaScript syntax validation, vet, race tests, and all binary builds
 - [x] 4.2 Smoke-test one deterministic local SteamApis-shaped endpoint without writing records
-- [ ] 4.3 Run one bounded real SteamApis query after a temporary API key is supplied; do not claim live provider verification before then
+- [ ] 4.3 Optional extension validation: after a temporary API key is supplied, run one bounded real SteamApis query; do not claim live provider verification before then, and do not treat this as a deterministic-core completion gate

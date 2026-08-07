@@ -10,13 +10,55 @@ The project keeps its formulas, storage schema, provider behavior, and error han
 
 > This project is not affiliated with Valve or Steam. Market data and calculated results are informational estimates, not financial advice.
 
+## Current status
+
+The latest immutable milestone is [`v0.6.0`](docs/releases/v0.6.0.md), which delivers deterministic calculations, SQLite history, browser E2E, container operation, and a controlled Railway demo. The current `main` additionally contains the not-yet-tagged SteamApis direct-search adapter described under [`Unreleased`](CHANGELOG.md#unreleased).
+
+| Scope | Delivery status | Default runtime state | Verification boundary |
+| --- | --- | --- | --- |
+| Profit calculation, target solving, SQLite history, CSV, browser, and CLI | **Core product ready** | Runs without external keys | Unit/race tests, 7 Chromium E2E workflows, and container-restart persistence checks |
+| Steam official public-market lookup | **Built-in data source** | Enabled by default | Automated contract tests; the official endpoint may rate-limit automated requests |
+| SteamApis market lookup | **Optional extension; adapter ready** | Enabled after setting the provider and key | Authentication, mapping, timeout, `429` retry, and failure paths are deterministic-tested; a real-key smoke is an optional extra validation task |
+| OpenAI strategy assistant | **Optional extension; adapter and quality gates ready** | Disabled by default; enabled after setting the provider and key | 50 deterministic tool cases, 12 versioned semantic cases, and scripted providers are verified; a paid live-model report is an optional extra validation task |
+| Controlled Railway demo | **Verified in `v0.6.0`** | One replica, HTTPS, shared reviewer credentials, SQLite volume | Read-only hosted checks, restart persistence, export integrity, and isolated restore are verified |
+
+> SteamApis and OpenAI are plug-in extension points, not unfinished core features. Connecting real keys adds live market data or natural-language interaction. Leaving either adapter disabled, temporarily unavailable, or replacing its provider does not affect calculation, target solving, history, import/export, or the CLI. Real-provider smoke runs add external-service evidence and can be executed separately with bounded scope; they are not prerequisites for the deterministic core.
+
+The controlled Railway demo is live at [steam-profit-calculator-production.up.railway.app](https://steam-profit-calculator-production.up.railway.app). Health is public, while the interactive workbench uses separately supplied reviewer credentials. The public demo runs the deterministic core; the SteamApis and OpenAI extensions can be enabled independently with server-side keys.
+
+## Interface preview
+
+### Workbench and optional AI surface
+
+![Steam Profit Calculator workbench overview](docs/images/workbench-overview.png)
+
+When AI is not enabled, the page reports the extension state while keeping the deterministic workbench available.
+
+### Multi-price calculation and SQLite history
+
+![Multi-price calculation results and SQLite history](docs/images/calculation-history.png)
+
+These screenshots use the local deterministic seed demo. Example records travel through the production calculation and persistence path and contain no real account, API-key, or market-trade data.
+
+## Six milestone releases
+
+| Version | Demonstrable milestone |
+| --- | --- |
+| [`v0.1.0`](docs/releases/v0.1.0.md) | Deterministic profit engine, compatible CLI, CSV records, and local browser foundation |
+| [`v0.2.0`](docs/releases/v0.2.0.md) | Tool-grounded AI assistant with evidence citations and numeric grounding |
+| [`v0.3.0`](docs/releases/v0.3.0.md) | Versioned SQLite, durable record IDs, filtering/pagination, and idempotent CSV import |
+| [`v0.4.0`](docs/releases/v0.4.0.md) | Deterministic demo data, browser E2E, non-root containers, health, and observability |
+| [`v0.5.0`](docs/releases/v0.5.0.md) | Typed OpenAI SSE, transient conversation, Stop/Retry, and versioned AI evaluation |
+| [`v0.6.0`](docs/releases/v0.6.0.md) | Controlled Railway demo, access protection, quotas, persistent volume, backup, and restore evidence |
+| [`main`](CHANGELOG.md#unreleased) | Lightweight SteamApis direct search and third-party-provider guidance when the official market rate-limits |
+
 ## Plug-in external capabilities, not runtime prerequisites
 
 Market data and AI are replaceable adapters rather than dependencies of deterministic calculation, SQLite history, or CSV workflows:
 
 - **The website works without external API keys.** Profit calculation, target solving, record persistence, filtering, pagination, and import/export stay local. AI is disabled by default, while lookup defaults to the keyless `steam_public` adapter.
-- **SteamApis is ready when configured.** After the server receives `STEAM_PROFIT_LOOKUP_PROVIDER=steamapis` and an API key, the browser, JSON API, CLI `lookup`, and AI `lookup_items` tool reuse the same normalized lookup boundary. Rotating the key or switching back to `steam_public` requires no UI, command, or data migration.
-- **OpenAI is ready when configured.** Setting `STEAM_PROFIT_AI_PROVIDER=openai` and a server-side API key adds the natural-language assistant. Provider selection, base URL, model, and key remain environment-managed and independently replaceable. A missing or unavailable model disables only the assistant, not the rest of the site.
+- **The SteamApis extension point is ready.** After the server receives `STEAM_PROFIT_LOOKUP_PROVIDER=steamapis` and an API key, the browser, JSON API, CLI `lookup`, and AI `lookup_items` tool reuse the same normalized lookup boundary. Rotating the key or switching back to `steam_public` requires no UI, command, or data migration.
+- **The OpenAI extension point and quality gates are ready.** Setting `STEAM_PROFIT_AI_PROVIDER=openai` and a server-side API key adds the natural-language assistant. Provider selection, base URL, model, and key remain environment-managed and independently replaceable. A missing or unavailable model disables only the assistant, not the rest of the site.
 - **Several entry points reuse one trusted core.** Browser, JSON API, CLI, and AI tools can invoke lookup and calculation capabilities; providers supply external information, while monetary results still come from the deterministic engine.
 
 Provider selection is explicit and never silently falls back. Configure a valid key before selecting `steamapis`; a runtime data-source outage fails lookup clearly while calculation, target solving, and history remain available.
@@ -129,7 +171,7 @@ docker compose up --build --wait
 
 See the [demo and operations runbook](docs/DEMO_RUNBOOK.zh-CN.md) for the walkthrough, browser test, backup, restore, and rollback paths. The [controlled hosted-demo runbook](docs/HOSTED_DEMO_RUNBOOK.zh-CN.md) defines the Railway HTTPS, secret, limit, persistent-volume, synthetic-check, and release boundary.
 
-The controlled Railway demo is live at [steam-profit-calculator-production.up.railway.app](https://steam-profit-calculator-production.up.railway.app). The health endpoint is public; the workbench requires a separately supplied reviewer credential. The hosted assistant intentionally remains disabled until a temporary model key and paid evaluation budget are supplied.
+The controlled Railway demo is live at [steam-profit-calculator-production.up.railway.app](https://steam-profit-calculator-production.up.railway.app). The health endpoint is public; the workbench requires a separately supplied reviewer credential. The hosted instance delivers the deterministic core; the OpenAI extension intentionally stays off by default and can be enabled, or live-validated separately, with a server-side key and explicit budget.
 
 ## Browser workbench
 
@@ -190,7 +232,7 @@ The source CSV is never modified. Existing source rows are skipped on repeat imp
 
 Every HTTP response includes an `X-Request-ID`. Request logs contain method, path, status, duration, and request ID only; aggregate metrics omit query strings, bodies, prompts, model output, market data, credentials, and record values.
 
-This remains a local single-user application or a controlled demo for a small reviewer group. The Railway instance has been verified with shared Basic credentials, public dependency health, request limits, one persistent SQLite volume, an application restart exercise, and a full-volume export that passed SQLite integrity and isolated-restore checks. It is not a full user system: registration, tenant isolation, cross-replica limits, persistent telemetry, managed backup/PITR, and a paid live-model baseline are still absent. The browser may send at most six page-local prior messages, but conversations, provider responses, and tool evidence are never persisted.
+This web application is scoped to local single-user operation or a controlled demo for a small reviewer group. The Railway instance has been verified with shared Basic credentials, public dependency health, request limits, one persistent SQLite volume, an application restart exercise, and a full-volume export that passed SQLite integrity and isolated-restore checks. Expanding it into a public multi-tenant product would additionally require registration, tenant isolation, cross-replica limits, persistent telemetry, and managed backup/PITR; those belong to future operations scope. A paid live-model baseline is optional OpenAI-extension evidence, not a missing deterministic website capability. The browser may send at most six page-local prior messages, but conversations, provider responses, and tool evidence are never persisted.
 
 ## AI strategy assistant
 
@@ -221,7 +263,7 @@ SSE event names remain `status`, `tool_start`, `evidence`, `delta`, `done`, and 
 
 ### AI quality evaluation
 
-Normal tests execute exactly 50 deterministic tool cases and scripted report tests without Steam or OpenAI network calls. Live semantic evaluation is always explicit and uses a deterministic lookup fixture:
+Normal tests execute exactly 50 deterministic tool cases and scripted report tests without Steam or OpenAI network calls. Live semantic evaluation is an optional extension-validation task and does not gate core website startup or deterministic quality checks. When desired, enable it explicitly with a deterministic lookup fixture:
 
 ```bash
 export STEAM_PROFIT_AI_PROVIDER=openai
@@ -365,6 +407,8 @@ go run ./cmd/steam-profit lookup --query "AK-47 Redline" --limit 5
 
 SteamApis search results can come from third-party marketplaces such as Buff163 or Skinport. The compatible `sell_price_text` includes that source, for example `$45.99 (Buff163)`, while `sale_price_text` remains empty because the lightweight search response has no separate recent-sale value. Treat the result as a provider snapshot, not an official Steam quote.
 
+The SteamApis adapter, configuration validation, and failure paths are implemented. A bounded real query with a temporary key is an additional environment-validation task that confirms the third-party service, plan, and credential state at that point in time. It does not change core website completeness or make the external provider a calculation or storage dependency.
+
 ## Record schema
 
 Terminal and `--output csv` rendering use seven fields:
@@ -417,11 +461,11 @@ make e2e
 make container-check
 ```
 
-Every push and pull request to `main` runs deterministic checks on Linux and macOS plus Chromium E2E and a Compose persistence smoke test. Dependabot checks Go modules, JavaScript packages, container bases, and GitHub Actions weekly.
+`main` is protected: changes merge through pull requests, must be up to date, must resolve review conversations, and must pass five required checks (three Go platform checks, Chromium E2E, and the Compose persistence smoke). Force pushes and branch deletion are disabled. Dependabot checks Go modules, JavaScript packages, container bases, and GitHub Actions weekly.
 
 For the complete command reference, field definitions, and error examples, see [CLI_USAGE.md](CLI_USAGE.md).
 
-For the remaining AI, database, evaluation, and deployment scope, see the [AI full-stack roadmap and workload estimate](docs/AI_FULLSTACK_ROADMAP.zh-CN.md) (Chinese).
+For further AI, database, evaluation, and public-operations extensions, see the [AI full-stack roadmap and workload estimate](docs/AI_FULLSTACK_ROADMAP.zh-CN.md) (Chinese).
 
 Demonstrable milestones use immutable Semantic Version tags and GitHub Pre-releases. See the [release workflow](docs/development/release-workflow.md) and [changelog](CHANGELOG.md).
 
