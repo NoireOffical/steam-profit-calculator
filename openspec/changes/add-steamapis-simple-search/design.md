@@ -56,7 +56,7 @@ Lookup performs no repository call. Invalid input is rejected by the service bef
 - Search results can contain the same item from multiple marketplaces → retain marketplace provenance in the displayed price text rather than deduplicating ambiguous offers.
 - Direct provider calls consume one request per search → keep the existing UI submit action and bounded result limit; caching is intentionally deferred.
 - SteamApis v2 response or plan behavior can change → isolate it behind the existing client interface and validate payloads strictly.
-- A real API key is required for final smoke testing → deterministic tests use a local HTTP server; release readiness still requires one bounded live query.
+- A real API key is required to prove the current third-party environment → deterministic tests use a local HTTP server for adapter acceptance; one bounded live query remains optional extension evidence and is not a deterministic-core release gate.
 
 ## Migration And Rollback
 

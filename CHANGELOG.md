@@ -8,6 +8,7 @@ All notable demonstrable milestones are recorded here. Until the public-operatio
 
 - A minimal authenticated SteamApis v2 lookup adapter that performs one direct keyword search without catalog caching or follow-up detail requests.
 - Strict SteamApis configuration and payload validation with bounded `429` retries, secret-safe failures, and deterministic provider tests.
+- Deterministic browser-workbench screenshots plus a bilingual README status matrix and six-milestone release overview.
 
 ### Changed
 
@@ -15,6 +16,7 @@ All notable demonstrable milestones are recorded here. Until the public-operatio
 - SteamApis marketplace provenance is included in the compatible price text so third-party offers are not represented as official Steam quotes.
 - Documentation and browser copy present market-data and model providers as optional, environment-configured adapters shared by browser, API, CLI, and assistant entry points; an unavailable adapter does not imply that deterministic calculation or history is unavailable.
 - Exhausted `429` retries from the default Steam official market endpoint now use a dedicated safe error code and recommend configuring a supported third-party Steam Market Provider instead of presenting the whole feature as unavailable.
+- README verification boundaries classify real SteamApis and OpenAI calls as optional extension evidence rather than unfinished core website work.
 
 ### Compatibility
 

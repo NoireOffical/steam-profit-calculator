@@ -11,6 +11,7 @@ The existing `steam_public` lookup adapter now receives repeated `429 Too Many R
 - Keep direct search deliberately small: no full-catalog synchronization, local search index, detail request, fallback chain, or persistence.
 - Preserve the current default `steam_public` provider and all existing CLI, HTTP, CSV, and SQLite contracts.
 - Document the lookup and model integrations as optional, replaceable adapters reused through browser, API, CLI, and assistant entry points rather than prerequisites for deterministic website workflows.
+- Present credentialed SteamApis and OpenAI smoke runs as optional extension verification, not as completion gates for the deterministic core product.
 
 ## Capabilities
 
@@ -24,4 +25,5 @@ The existing `steam_public` lookup adapter now receives repeated `429 Too Many R
 - New environment configuration documentation for selecting `steamapis` and injecting its API key.
 - Browser copy changes from “Steam public market” to the configured market-data provider boundary.
 - Clear degraded-state copy: a provider lookup failure does not imply that calculation, target solving, or history is unavailable.
+- Bilingual README status and screenshots distinguish the released core, ready extension points, and optional live-provider evidence.
 - No calculation formula, CLI flag, HTTP schema, CSV schema, SQLite schema, assistant tool schema, or persisted data changes.
