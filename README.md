@@ -12,7 +12,7 @@ The project keeps its formulas, storage schema, provider behavior, and error han
 
 ## Current status
 
-The latest immutable milestone is [`v0.6.0`](docs/releases/v0.6.0.md), which delivers deterministic calculations, SQLite history, browser E2E, container operation, and a controlled Railway demo. The current `main` additionally contains the not-yet-tagged SteamApis direct-search adapter described under [`Unreleased`](CHANGELOG.md#unreleased).
+The latest immutable milestone is [`v0.7.0`](docs/releases/v0.7.0.md), which packages the deterministic core, controlled Railway demo, SteamApis extension adapter, and a sanitized GitHub walkthrough into one portfolio-ready release.
 
 | Scope | Delivery status | Default runtime state | Verification boundary |
 | --- | --- | --- | --- |
@@ -28,6 +28,12 @@ The controlled Railway demo is live at [steam-profit-calculator-production.up.ra
 
 ## Interface preview
 
+### Ten-second product walkthrough
+
+[![Steam Profit Calculator calculation and SQLite history walkthrough](docs/images/steam-profit-demo.gif)](https://github.com/NoireOffical/steam-profit-calculator/releases/download/v0.7.0/steam-profit-demo.mp4)
+
+The recording uses the versioned local seed dataset and the production browser, calculation, API, and SQLite paths. It shows a four-price comparison followed by a persisted-history filter; it contains no account, credential, API-key, or real-trade data. Click the animation for the full-resolution H.264 MP4 attached to the `v0.7.0` Pre-release.
+
 ### Workbench and optional AI surface
 
 ![Steam Profit Calculator workbench overview](docs/images/workbench-overview.png)
@@ -40,7 +46,7 @@ When AI is not enabled, the page reports the extension state while keeping the d
 
 These screenshots use the local deterministic seed demo. Example records travel through the production calculation and persistence path and contain no real account, API-key, or market-trade data.
 
-## Six milestone releases
+## Seven milestone releases
 
 | Version | Demonstrable milestone |
 | --- | --- |
@@ -50,7 +56,7 @@ These screenshots use the local deterministic seed demo. Example records travel 
 | [`v0.4.0`](docs/releases/v0.4.0.md) | Deterministic demo data, browser E2E, non-root containers, health, and observability |
 | [`v0.5.0`](docs/releases/v0.5.0.md) | Typed OpenAI SSE, transient conversation, Stop/Retry, and versioned AI evaluation |
 | [`v0.6.0`](docs/releases/v0.6.0.md) | Controlled Railway demo, access protection, quotas, persistent volume, backup, and restore evidence |
-| [`main`](CHANGELOG.md#unreleased) | Lightweight SteamApis direct search and third-party-provider guidance when the official market rate-limits |
+| [`v0.7.0`](docs/releases/v0.7.0.md) | Lightweight SteamApis direct search, provider-ready documentation, and a release-backed product walkthrough |
 
 ## Plug-in external capabilities, not runtime prerequisites
 

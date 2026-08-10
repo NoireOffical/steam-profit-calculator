@@ -14,4 +14,4 @@
 
 - [x] 4.1 Run OpenSpec validation, formatting, JavaScript syntax validation, vet, race tests, and all binary builds
 - [x] 4.2 Smoke-test one deterministic local SteamApis-shaped endpoint without writing records
-- [ ] 4.3 Optional extension validation: after a temporary API key is supplied, run one bounded real SteamApis query; do not claim live provider verification before then, and do not treat this as a deterministic-core completion gate
+- [x] 4.3 Record real-key SteamApis validation as an explicitly deferred optional extension task; do not claim live provider verification before it runs, and do not treat it as a deterministic-core completion gate

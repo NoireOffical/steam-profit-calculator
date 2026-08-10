@@ -12,7 +12,7 @@ Steam Profit Calculator 是一个使用 Go 编写的 Steam Community Market 收�
 
 ## 当前状态
 
-最新固定里程碑是 [`v0.6.0`](docs/releases/v0.6.0.md)，已经完成确定性计算、SQLite 历史、浏览器 E2E、容器化运行和 Railway 受控演示。当前 `main` 在此基础上增加了尚未打 Tag 的 SteamApis 直接搜索适配器，具体变化记录在 [`Unreleased`](CHANGELOG.md#unreleased)。
+最新固定里程碑是 [`v0.7.0`](docs/releases/v0.7.0.md)，把确定性核心、Railway 受控演示、SteamApis 扩展适配器和不含敏感信息的 GitHub 操作演示整理为一个适合作品集展示的版本。
 
 | 范围 | 交付状态 | 默认运行状态 | 验证边界 |
 | --- | --- | --- | --- |
@@ -28,6 +28,12 @@ Steam Profit Calculator 是一个使用 Go 编写的 Steam Community Market 收�
 
 ## 界面预览
 
+### 10 秒产品操作演示
+
+[![Steam Profit Calculator 收益计算与 SQLite 历史演示](docs/images/steam-profit-demo.gif)](https://github.com/NoireOffical/steam-profit-calculator/releases/download/v0.7.0/steam-profit-demo.mp4)
+
+录制使用版本化本地种子数据，并实际经过正式网页、计算 API 和 SQLite 持久化路径；内容依次展示四组卖价对比与历史记录筛选，不包含账号、凭据、API Key 或真实交易数据。点击动图可查看 `v0.7.0` Pre-release 附带的高清 H.264 MP4。
+
 ### 工作台与可选 AI 区域
 
 ![Steam Profit Calculator 工作台总览](docs/images/workbench-overview.png)
@@ -40,7 +46,7 @@ AI 未启用时，页面会明确显示扩展状态，确定性计算工作台�
 
 截图来自本地固定种子演示；示例记录由正式计算与持久化路径生成，不包含真实账户、API Key 或市场交易数据。
 
-## 六个里程碑的演进
+## 七个里程碑的演进
 
 | 版本 | 可演示里程碑 |
 | --- | --- |
@@ -50,7 +56,7 @@ AI 未启用时，页面会明确显示扩展状态，确定性计算工作台�
 | [`v0.4.0`](docs/releases/v0.4.0.md) | 固定演示数据、浏览器 E2E、非 root 容器、健康与可观测性 |
 | [`v0.5.0`](docs/releases/v0.5.0.md) | 类型化 OpenAI SSE、临时对话、停止/重试和版本化 AI 评测 |
 | [`v0.6.0`](docs/releases/v0.6.0.md) | Railway 受控演示、访问保护、配额、持久卷、备份与恢复验证 |
-| [`main`](CHANGELOG.md#unreleased) | SteamApis 轻量直接搜索和官方市场限流时的第三方 Provider 引导 |
+| [`v0.7.0`](docs/releases/v0.7.0.md) | SteamApis 轻量直接搜索、接入即用说明和带 Release 高清附件的产品操作演示 |
 
 ## 外部能力：接入即用，而非运行前置条件
 
