@@ -8,7 +8,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/steam-profit-server ./cmd/steam-profit-server
 
-FROM alpine:3.24.1 AS runtime
+FROM alpine:3.24.3 AS runtime
 
 RUN apk add --no-cache ca-certificates su-exec \
     && addgroup -S steam-profit \
